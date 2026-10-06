@@ -15,7 +15,7 @@
   },
   "scripts": {
     "clean": "node -e \"import('node:fs').then(f => f.rmSync('dist', { recursive: true, force: true }))\"",
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && tsc && node -e \"import('node:fs').then(f => f.chmodSync('dist/cli.js', 0o755))\"",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build"
   },
