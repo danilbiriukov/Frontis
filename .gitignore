@@ -1,0 +1,38 @@
+# Зависимости
+node_modules/
+
+# Сборка
+dist/
+build/
+*.tsbuildinfo
+
+# Логи
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Переменные окружения
+.env
+.env.*
+!.env.example
+
+# Тесты и покрытие
+coverage/
+
+# Кэш
+.cache/
+.eslintcache
+.npm/
+
+# Архивы после npm pack
+*.tgz
+
+# Редакторы и ОС
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
