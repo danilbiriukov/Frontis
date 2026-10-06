@@ -1,13 +1,26 @@
 {
   "name": "frontis",
   "version": "0.0.1",
-  "description": "Placeholder. Package under development.",
-  "main": "index.js",
-  "files": [
-    "index.js"
-  ],
-  "keywords": [
-    "frontis"
-  ],
-  "license": "MIT"
+  "description": "Консольная утилита для аудита фронтенд-проекта: собирает результаты в один HTML-отчёт",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "frontis": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "LICENSE", "README.md"],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "clean": "node -e \"import('node:fs').then(f => f.rmSync('dist', { recursive: true, force: true }))\"",
+    "build": "npm run clean && tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
 }
