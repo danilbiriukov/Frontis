@@ -1,0 +1,13 @@
+{
+  "name": "frontis",
+  "version": "0.0.1",
+  "description": "Placeholder. Package under development.",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "keywords": [
+    "frontis"
+  ],
+  "license": "MIT"
+}
