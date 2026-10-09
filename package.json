@@ -18,10 +18,12 @@
     "build": "npm run clean && tsc && node -e \"import('node:fs').then(f => f.chmodSync('dist/cli.js', 0o755))\"",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
+    "lint": "oxlint --deny-warnings",
     "test": "npm run build && node --test \"test/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "oxlint": "1.87.0",
     "typescript": "7.0.2"
   },
   "dependencies": {
