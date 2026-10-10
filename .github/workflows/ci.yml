@@ -41,3 +41,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # Единственная проверка, обязательная для слияния в main (ruleset).
+  # Матрицу test можно менять, не трогая правило: оно смотрит только сюда.
+  # always() нужен, потому что пропущенная задача считается для GitHub пройденной
+  lint-and-tests-passed:
+    if: always()
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Проверить, что lint и все задачи test завершились успешно
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "lint: ${{ needs.lint.result }}, test: ${{ needs.test.result }}"
+          exit 1
