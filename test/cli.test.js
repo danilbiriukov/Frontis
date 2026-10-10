@@ -33,6 +33,24 @@ test('неизвестная команда — код 2 и подсказка',
   assert.match(stderr, /frontis --help/);
 });
 
+test('run --help выводит справку и не запускает проверки', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  try {
+    const { status, stdout, stderr } = frontis(['run', '--help'], dir);
+    assert.equal(status, 0);
+    assert.match(stdout, /frontis run/);
+    assert.equal(stderr, '');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('run с неизвестным флагом — код 2 и имя флага', () => {
+  const { status, stderr } = frontis(['run', '--no-such-flag'], join(import.meta.dirname, 'fixtures', 'cjs-ts'));
+  assert.equal(status, 2);
+  assert.match(stderr, /Неизвестный аргумент: --no-such-flag/);
+});
+
 test('run без конфига — понятное сообщение без стека', () => {
   const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
   try {

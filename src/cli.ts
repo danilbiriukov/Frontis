@@ -14,10 +14,17 @@ function readVersion(): string {
   return (JSON.parse(raw) as { version: string }).version;
 }
 
-async function main(argv: string[]): Promise<number> {
-  const command = argv[0];
+const isHelp = (arg: string | undefined): boolean => arg === '-h' || arg === '--help';
 
-  if (command === undefined || command === '-h' || command === '--help') {
+function unknownArgument(arg: string): number {
+  console.error(`Неизвестный аргумент: ${arg}\nСправка: frontis --help`);
+  return 2;
+}
+
+async function main(argv: string[]): Promise<number> {
+  const [command, ...rest] = argv;
+
+  if (command === undefined || isHelp(command)) {
     console.log(HELP);
     return 0;
   }
@@ -26,6 +33,12 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (command === 'run') {
+    if (rest.some(isHelp)) {
+      console.log(HELP);
+      return 0;
+    }
+    // Флагов у run пока нет: любой аргумент — ошибка, а не молчаливый пропуск
+    if (rest.length > 0) return unknownArgument(rest[0]);
     return run({ cwd: process.cwd() });
   }
 

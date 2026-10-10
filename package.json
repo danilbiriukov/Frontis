@@ -1,8 +1,27 @@
 {
   "name": "frontis",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Консольная утилита для аудита фронтенд-проекта: собирает результаты в один HTML-отчёт",
+  "keywords": [
+    "frontend",
+    "audit",
+    "cli",
+    "report",
+    "html-report",
+    "knip",
+    "eslint",
+    "npm-audit"
+  ],
   "license": "Apache-2.0",
+  "author": "Biriukov Danil <danilbiriukovv@gmail.com>",
+  "homepage": "https://github.com/danilbiriukov/Frontis#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danilbiriukov/Frontis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/danilbiriukov/Frontis/issues"
+  },
   "type": "module",
   "bin": {
     "frontis": "dist/cli.js"
