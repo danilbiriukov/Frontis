@@ -1,7 +1,11 @@
 name: CI
 
+# Ветки проверяются через pull_request, push — только для main после слияния.
+# Если запускать и по push в любую ветку, каждый коммит в открытом PR
+# прогоняется дважды
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
