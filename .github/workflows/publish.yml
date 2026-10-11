@@ -1,37 +1,83 @@
 # .github/workflows/publish.yml
-name: Publish to npm
+name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'main: patch/minor/major; release/*: pre*'
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+          - prepatch
+          - preminor
+          - premajor
+          - prerelease
 
 permissions:
-  id-token: write
   contents: read
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  release:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-latest
+    environment: npm
+    env:
+      BUMP: ${{ inputs.bump }}
+      BRANCH: ${{ github.ref_name }}
     steps:
+      - name: Resolve dist-tag
+        id: meta
+        run: |
+          if [ "$BRANCH" = "main" ]; then
+            case "$BUMP" in
+              patch|minor|major) ;;
+              *) echo "::error::Из main можно выпускать только patch/minor/major"; exit 1 ;;
+            esac
+            echo "dist_tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            case "$BUMP" in
+              pre*) ;;
+              *) echo "::error::Из release/* можно выпускать только пре-релизы"; exit 1 ;;
+            esac
+            echo "dist_tag=next" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: 'https://registry.npmjs.org'
           cache: npm
 
       - run: npm install -g npm@latest
+
       - run: npm ci
 
-      - name: Check tag matches package.json
-        run: |
-          PKG="v$(node -p "require('./package.json').version")"
-          if [ "$PKG" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME != package.json $PKG"
-            exit 1
-          fi
-
       - run: npm test --if-present
-      - run: npm run build --if-present
-      - run: npm publish
+
+      - name: Bump version
+        id: version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npm version "$BUMP" --preid beta -m "chore(release): %s"
+          echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - run: npm publish --tag "${{ steps.meta.outputs.dist_tag }}"
+
+      - name: Push commit and tag
+        run: git push --atomic origin "HEAD:$BRANCH" "${{ steps.version.outputs.tag }}"

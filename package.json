@@ -1,7 +1,7 @@
 {
   "name": "frontis",
   "type": "module",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "Консольная утилита для аудита фронтенд-проекта: собирает результаты в один HTML-отчёт",
   "scripts": {
     "clean": "node -e \"import('node:fs').then(f => f.rmSync('dist', { recursive: true, force: true }))\"",
