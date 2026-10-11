@@ -34,11 +34,19 @@ export interface FrontisConfig {
   open?: boolean;
   /** Ограничение времени на один модуль, мс, от 1000 до 600000. По умолчанию 120000. */
   timeoutMs?: number;
-  targets?: {
-    /** Целевая версия Node: "22" или "22.4.1". По умолчанию "22". */
-    nodeVersion?: string;
-    /** Цель по покрытию тестами, от 0 до 100 процентов. По умолчанию 90. */
-    coverage?: number;
+  /** Команда запуска тестов, если в проекте нет готового отчёта о покрытии. */
+  testCommand?: string;
+  thresholds?: {
+    coverage?: {
+      /** Покрытие строк ниже этого значения — высокая важность. По умолчанию 65. */
+      warn?: number;
+      /** Покрытие строк от этого значения — находки нет. По умолчанию 90. */
+      target?: number;
+    };
+    buildSize?: {
+      /** Предел размера сборки, МБ, больше нуля. По умолчанию 5. */
+      maxMb?: number;
+    };
   };
   /** Переопределение настроек модулей. */
   modules?: { [name in ModuleName]?: ModuleConfig };
@@ -47,6 +55,11 @@ export interface FrontisConfig {
 export interface ResolvedModuleConfig {
   enabled: boolean;
   timeoutMs: number;
+}
+
+export interface Thresholds {
+  coverage: { warn: number; target: number };
+  buildSize: { maxMb: number };
 }
 
 export interface ResolvedConfig {
@@ -59,10 +72,8 @@ export interface ResolvedConfig {
   outFile: string;
   open: boolean;
   timeoutMs: number;
-  targets: {
-    nodeVersion: string;
-    coverage: number;
-  };
+  testCommand: string | undefined;
+  thresholds: Thresholds;
   modules: Record<ModuleName, ResolvedModuleConfig>;
 }
 
@@ -77,15 +88,17 @@ const TOP_LEVEL_KEYS = [
   'outFile',
   'open',
   'timeoutMs',
-  'targets',
+  'testCommand',
+  'thresholds',
   'modules',
 ];
-const TARGET_KEYS = ['nodeVersion', 'coverage'];
+const THRESHOLD_KEYS = ['coverage', 'buildSize'];
+const COVERAGE_KEYS = ['warn', 'target'];
+const BUILD_SIZE_KEYS = ['maxMb'];
 const MODULE_KEYS = ['enabled', 'timeoutMs'];
 
 const TIMEOUT_MIN = 1000;
 const TIMEOUT_MAX = 600_000;
-const NODE_VERSION = /^\d+(\.\d+){0,2}$/;
 
 type Fields = Record<string, unknown>;
 
@@ -148,7 +161,7 @@ class Checker {
     }
   }
 
-  string(fields: Fields, key: string, path: string, fallback: string): string {
+  string<T extends string | undefined>(fields: Fields, key: string, path: string, fallback: T): string | T {
     const value = fields[key];
     if (value === undefined) return fallback;
     if (typeof value === 'string' && value !== '') return value;
@@ -174,11 +187,19 @@ class Checker {
     return fallback;
   }
 
-  section(fields: Fields, key: string): Fields {
+  percent(fields: Fields, key: string, path: string, fallback: number): number {
+    const value = fields[key];
+    if (value === undefined) return fallback;
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100) return value;
+    this.fail(path, 'ожидалось число от 0 до 100', value);
+    return fallback;
+  }
+
+  section(fields: Fields, key: string, path: string = key): Fields {
     const value = fields[key];
     if (value === undefined) return {};
     if (isFields(value)) return value;
-    this.fail(key, 'ожидался объект', value);
+    this.fail(path, 'ожидался объект', value);
     return {};
   }
 }
@@ -195,26 +216,32 @@ function checkVersion(value: unknown, checker: Checker): void {
   checker.fail('configVersion', 'ожидалось 1', value);
 }
 
-function checkTargets(fields: Fields, checker: Checker): ResolvedConfig['targets'] {
-  checker.unknownKeys(fields, TARGET_KEYS, 'targets.', 'неизвестное поле');
+function checkThresholds(fields: Fields, checker: Checker): Thresholds {
+  checker.unknownKeys(fields, THRESHOLD_KEYS, 'thresholds.', 'неизвестное поле');
 
-  let nodeVersion = '22';
-  const version = fields['nodeVersion'];
-  if (typeof version === 'string' && NODE_VERSION.test(version)) {
-    nodeVersion = version;
-  } else if (version !== undefined) {
-    checker.fail('targets.nodeVersion', 'ожидалась строка вида "22" или "22.4.1"', version);
+  const coverage = checker.section(fields, 'coverage', 'thresholds.coverage');
+  checker.unknownKeys(coverage, COVERAGE_KEYS, 'thresholds.coverage.', 'неизвестное поле');
+  const errorsBefore = checker.errors.length;
+  const warn = checker.percent(coverage, 'warn', 'thresholds.coverage.warn', 65);
+  const target = checker.percent(coverage, 'target', 'thresholds.coverage.target', 90);
+  // Сравниваем только корректные числа, иначе к ошибке типа добавится вторая, ложная
+  if (checker.errors.length === errorsBefore && warn >= target) {
+    checker.errors.push(
+      `thresholds.coverage: warn должен быть меньше target, получено warn ${warn} и target ${target}`,
+    );
   }
 
-  let coverage = 90;
-  const percent = fields['coverage'];
-  if (typeof percent === 'number' && Number.isFinite(percent) && percent >= 0 && percent <= 100) {
-    coverage = percent;
-  } else if (percent !== undefined) {
-    checker.fail('targets.coverage', 'ожидалось число от 0 до 100', percent);
+  const buildSize = checker.section(fields, 'buildSize', 'thresholds.buildSize');
+  checker.unknownKeys(buildSize, BUILD_SIZE_KEYS, 'thresholds.buildSize.', 'неизвестное поле');
+  let maxMb = 5;
+  const size = buildSize['maxMb'];
+  if (typeof size === 'number' && Number.isFinite(size) && size > 0) {
+    maxMb = size;
+  } else if (size !== undefined) {
+    checker.fail('thresholds.buildSize.maxMb', 'ожидалось число больше нуля', size);
   }
 
-  return { nodeVersion, coverage };
+  return { coverage: { warn, target }, buildSize: { maxMb } };
 }
 
 function checkModules(fields: Fields, timeoutMs: number, checker: Checker): ResolvedConfig['modules'] {
@@ -277,7 +304,8 @@ export function resolveConfig(raw: unknown, configPath?: string): ResolvedConfig
     outFile: resolve(configDir, checker.string(raw, 'outFile', 'outFile', 'frontis-report.html')),
     open: checker.boolean(raw, 'open', 'open', true),
     timeoutMs,
-    targets: checkTargets(checker.section(raw, 'targets'), checker),
+    testCommand: checker.string(raw, 'testCommand', 'testCommand', undefined),
+    thresholds: checkThresholds(checker.section(raw, 'thresholds'), checker),
     modules: checkModules(checker.section(raw, 'modules'), timeoutMs, checker),
   };
 

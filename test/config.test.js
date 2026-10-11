@@ -18,16 +18,17 @@ test('пустой объект — все значения по умолчан�
     outFile: join(configDir, 'frontis-report.html'),
     open: true,
     timeoutMs: 120000,
-    targets: { nodeVersion: '22', coverage: 90 },
+    testCommand: undefined,
+    thresholds: { coverage: { warn: 65, target: 90 }, buildSize: { maxMb: 5 } },
     modules,
   });
 });
 
 test('частичный конфиг — заданные поля из него, остальные по умолчанию', () => {
-  const config = check({ configVersion: 1, open: false, timeoutMs: 5000, targets: { coverage: 75 } });
+  const config = check({ configVersion: 1, open: false, timeoutMs: 5000, thresholds: { coverage: { target: 75 } } });
   assert.equal(config.open, false);
   assert.equal(config.timeoutMs, 5000);
-  assert.deepEqual(config.targets, { nodeVersion: '22', coverage: 75 });
+  assert.deepEqual(config.thresholds, { coverage: { warn: 65, target: 75 }, buildSize: { maxMb: 5 } });
   assert.equal(config.buildDir, join(configDir, 'dist'));
   assert.equal(config.modules.knip.timeoutMs, 5000);
 });
@@ -60,8 +61,11 @@ test('неверный тип у timeoutMs', () => {
   assert.throws(() => check({ timeoutMs: '5000' }), configError(/timeoutMs: ожидалось целое число от 1000 до 600000, получено "5000"/));
 });
 
-test('неверный тип у targets.coverage', () => {
-  assert.throws(() => check({ targets: { coverage: '90%' } }), configError(/targets\.coverage: ожидалось число от 0 до 100, получено "90%"/));
+test('неверный тип у thresholds.coverage.target', () => {
+  assert.throws(
+    () => check({ thresholds: { coverage: { target: '90%' } } }),
+    configError(/thresholds\.coverage\.target: ожидалось число от 0 до 100, получено "90%"/),
+  );
 });
 
 for (const timeoutMs of [999, 600001, 0, -1, 1500.5]) {
@@ -76,25 +80,42 @@ for (const timeoutMs of [1000, 600000]) {
   });
 }
 
-for (const coverage of [0, 100, 42.5]) {
-  test(`targets.coverage ${coverage} — проходит`, () => {
-    assert.equal(check({ targets: { coverage } }).targets.coverage, coverage);
+for (const target of [100, 42.5]) {
+  test(`thresholds.coverage.target ${target} — проходит`, () => {
+    assert.equal(check({ thresholds: { coverage: { warn: 0, target } } }).thresholds.coverage.target, target);
   });
 }
 
-for (const coverage of [101, -1]) {
-  test(`targets.coverage ${coverage} — ошибка`, () => {
-    assert.throws(() => check({ targets: { coverage } }), configError(/targets\.coverage: ожидалось число от 0 до 100/));
+for (const target of [101, -1]) {
+  test(`thresholds.coverage.target ${target} — ошибка`, () => {
+    assert.throws(
+      () => check({ thresholds: { coverage: { target } } }),
+      configError(/thresholds\.coverage\.target: ожидалось число от 0 до 100/),
+    );
   });
 }
 
-test('targets.nodeVersion: "22.4.1" проходит, "v22" нет', () => {
-  assert.equal(check({ targets: { nodeVersion: '22.4.1' } }).targets.nodeVersion, '22.4.1');
-  assert.throws(() => check({ targets: { nodeVersion: 'v22' } }), configError(/targets\.nodeVersion: .*получено "v22"/));
+test('неверный тип у thresholds.coverage.warn — без ложной ошибки про порядок порогов', () => {
+  assert.throws(
+    () => check({ thresholds: { coverage: { warn: 'много' } } }),
+    (error) => {
+      assert.match(error.message, /найдены ошибки \(1\)/);
+      assert.match(error.message, /thresholds\.coverage\.warn: ожидалось число от 0 до 100, получено "много"/);
+      return true;
+    },
+  );
 });
 
-test('неизвестное поле в targets — ошибка', () => {
-  assert.throws(() => check({ targets: { node: '22' } }), configError(/targets\.node: неизвестное поле/));
+test('неизвестное поле в thresholds — ошибка', () => {
+  assert.throws(() => check({ thresholds: { size: {} } }), configError(/thresholds\.size: неизвестное поле/));
+});
+
+test('targets больше не поддерживается — неизвестное поле', () => {
+  assert.throws(() => check({ targets: { coverage: 90 } }), configError(/targets: неизвестное поле/));
+});
+
+test('testCommand задаётся строкой', () => {
+  assert.equal(check({ testCommand: 'npm test' }).testCommand, 'npm test');
 });
 
 test('неизвестное имя модуля — ошибка со списком допустимых', () => {
@@ -124,11 +145,11 @@ test('неверные значения внутри модуля — ошибк
 
 test('несколько ошибок — все в одном сообщении', () => {
   assert.throws(
-    () => check({ buildDirr: 'out', open: 1, timeoutMs: 1, targets: { coverage: 200 }, modules: { foo: {} } }),
+    () => check({ buildDirr: 'out', open: 1, timeoutMs: 1, thresholds: { coverage: { target: 200 } }, modules: { foo: {} } }),
     (error) => {
       assert.equal(error.name, 'ConfigError');
       assert.match(error.message, /найдены ошибки \(5\)/);
-      for (const field of ['buildDirr', 'open', 'timeoutMs', 'targets.coverage', 'modules.foo']) {
+      for (const field of ['buildDirr', 'open', 'timeoutMs', 'thresholds.coverage.target', 'modules.foo']) {
         assert.ok(error.message.includes(`- ${field}: `), field);
       }
       return true;
