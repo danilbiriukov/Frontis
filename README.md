@@ -1,4 +1,9 @@
-# Frontis
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danilbiriukov/Frontis/main/assets/brand/readme-header-dark.svg">
+    <img alt="Frontis" src="https://raw.githubusercontent.com/danilbiriukov/Frontis/main/assets/brand/readme-header-light.svg" width="100%">
+  </picture>
+</p>
 
 Консольная утилита для аудита фронтенд-проекта. Не проверяет код сама, а собирает результаты готовых инструментов (knip, eslint, jest или vitest, npm audit) и показывает их в одном локальном HTML-отчёте.
 

@@ -46,9 +46,6 @@ jobs:
       - run: npm ci
       - run: npm test
 
-  # Единственная проверка, обязательная для слияния в main (ruleset).
-  # Матрицу test можно менять, не трогая правило: оно смотрит только сюда.
-  # always() нужен, потому что пропущенная задача считается для GitHub пройденной
   lint-and-tests-passed:
     if: always()
     needs: [lint, test]

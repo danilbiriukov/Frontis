@@ -1,7 +1,44 @@
 {
   "name": "frontis",
-  "version": "0.0.2",
+  "type": "module",
+  "version": "0.0.1",
   "description": "Консольная утилита для аудита фронтенд-проекта: собирает результаты в один HTML-отчёт",
+  "scripts": {
+    "clean": "node -e \"import('node:fs').then(f => f.rmSync('dist', { recursive: true, force: true }))\"",
+    "build": "npm run clean && tsc && node -e \"import('node:fs').then(f => f.chmodSync('dist/cli.js', 0o755))\"",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "lint": "oxlint --deny-warnings",
+    "test": "npm run build && node --test \"test/*.test.js\""
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "LICENSE", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "oxlint": "1.87.0",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "jiti": "2.7.0"
+  },
+  "homepage": "https://github.com/danilbiriukov/Frontis#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danilbiriukov/Frontis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/danilbiriukov/Frontis/issues"
+  },
+  "bin": {
+    "frontis": "dist/cli.js"
+  },
   "keywords": [
     "frontend",
     "audit",
@@ -12,40 +49,6 @@
     "eslint",
     "npm-audit"
   ],
-  "license": "Apache-2.0",
   "author": "Biriukov Danil <danilbiriukovv@gmail.com>",
-  "homepage": "https://github.com/danilbiriukov/Frontis#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/danilbiriukov/Frontis.git"
-  },
-  "bugs": {
-    "url": "https://github.com/danilbiriukov/Frontis/issues"
-  },
-  "type": "module",
-  "bin": {
-    "frontis": "dist/cli.js"
-  },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": ["dist", "LICENSE", "README.md"],
-  "engines": {
-    "node": ">=22"
-  },
-  "scripts": {
-    "clean": "node -e \"import('node:fs').then(f => f.rmSync('dist', { recursive: true, force: true }))\"",
-    "build": "npm run clean && tsc && node -e \"import('node:fs').then(f => f.chmodSync('dist/cli.js', 0o755))\"",
-    "dev": "tsc --watch",
-    "prepublishOnly": "npm run build",
-    "lint": "oxlint --deny-warnings",
-    "test": "npm run build && node --test \"test/*.test.js\""
-  },
-  "devDependencies": {
-    "@types/node": "22.20.5",
-    "oxlint": "1.87.0",
-    "typescript": "7.0.2"
-  },
-  "dependencies": {
-    "jiti": "2.7.0"
-  }
+  "license": "Apache-2.0"
 }

@@ -1,12 +1,11 @@
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { createJiti } from 'jiti';
+import { ConfigError } from './errors.js';
+
+export { ConfigError };
 
 const CONFIG_NAMES = ['frontis.config.ts', 'frontis.config.mjs', 'frontis.config.js'];
-
-export class ConfigError extends Error {
-  override name = 'ConfigError';
-}
 
 export function findConfigFile(cwd: string): string {
   const found = CONFIG_NAMES.filter((name) => existsSync(join(cwd, name)));

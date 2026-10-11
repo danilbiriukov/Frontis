@@ -63,8 +63,8 @@ test('run без конфига — понятное сообщение без �
   }
 });
 
-test('run с конфигом — код 0', () => {
-  const { status, stdout } = frontis(['run'], join(import.meta.dirname, 'fixtures', 'cjs-ts'));
+test('run с пустым конфигом — код 0 и путь к конфигу', () => {
+  const { status, stdout } = frontis(['run'], join(import.meta.dirname, 'fixtures', 'empty'));
   assert.equal(status, 0);
   assert.match(stdout, /frontis\.config\.ts/);
 });
@@ -74,4 +74,11 @@ test('cli.js запускается напрямую через shebang', { skip
   const { status, stdout } = spawnSync(cli, ['--version'], { encoding: 'utf8' });
   assert.equal(status, 0);
   assert.equal(stdout.trim(), version);
+});
+
+test('run с ошибкой в конфиге — код 2, имя поля и без стека', () => {
+  const { status, stderr } = frontis(['run'], join(import.meta.dirname, 'fixtures', 'cjs-ts'));
+  assert.equal(status, 2);
+  assert.match(stderr, /name: неизвестное поле/);
+  assert.doesNotMatch(stderr, /\s+at\s/);
 });
