@@ -29,7 +29,7 @@
 ## Структура
 
 - `src/core` ядро: запуск, чтение конфига
-- `src/collectors` модули сбора данных
+- `src/collectors` [контракт модулей сбора данных](docs/collector-contract.md)
 - `src/report` сборка HTML-отчёта
 
 ## Лицензия
