@@ -1,0 +1,378 @@
+{
+  "packageName": "@code-pushup/core",
+  "version": "0.126.4",
+  "date": "2026-11-06T10:24:09.217Z",
+  "duration": 7807,
+  "plugins": [
+    {
+      "packageName": "@code-pushup/js-packages-plugin",
+      "version": "0.126.4",
+      "title": "JS packages",
+      "description": "This plugin runs audit to uncover vulnerabilities and lists outdated dependencies. It supports npm, yarn classic, yarn modern, and pnpm package managers.",
+      "docsUrl": "https://docs.npmjs.com/",
+      "slug": "js-packages",
+      "icon": "npm",
+      "date": "2026-11-06T10:24:09.299Z",
+      "duration": 5115,
+      "audits": [
+        {
+          "slug": "npm-audit-prod",
+          "title": "Vulnerabilities for npm prod dependencies.",
+          "description": "Runs security audit on prod dependencies.",
+          "docsUrl": "https://classic.yarnpkg.com/docs/dependency-types#toc-dependencies",
+          "displayValue": "1 vulnerability (1 high)",
+          "value": 1,
+          "score": 0.9,
+          "details": {
+            "issues": [
+              {
+                "message": "`lodash` dependency has a **high** vulnerability in versions **<=4.17.23**. Fix available: Update `lodash` to version **4.18.1**. More information: [Command Injection in lodash](https://github.com/advisories/GHSA-35jh-r3h4-6jhm)",
+                "severity": "error"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "npm-audit-dev",
+          "title": "Vulnerabilities for npm dev dependencies.",
+          "description": "Runs security audit on dev dependencies.",
+          "docsUrl": "https://classic.yarnpkg.com/docs/dependency-types#toc-devdependencies",
+          "displayValue": "1 vulnerability (1 critical)",
+          "value": 1,
+          "score": 0,
+          "details": {
+            "issues": [
+              {
+                "message": "`minimist` dependency has a **critical** vulnerability in versions **<=0.2.3**. Fix available: Update `minimist` to version **1.2.8** (breaking change). More information: [Prototype Pollution in minimist](https://github.com/advisories/GHSA-vh95-rmgr-6w4m)",
+                "severity": "error"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "npm-outdated-prod",
+          "title": "Outdated npm prod dependencies.",
+          "description": "Checks for outdated prod dependencies",
+          "docsUrl": "https://classic.yarnpkg.com/docs/dependency-types#toc-dependencies",
+          "displayValue": "1 minor outdated package version",
+          "value": 1,
+          "score": 1,
+          "details": {
+            "issues": [
+              {
+                "message": "Package [`lodash`](https://lodash.com/) requires a **minor** update from **4.17.15** to **4.18.1**.",
+                "severity": "warning"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "npm-outdated-dev",
+          "title": "Outdated npm dev dependencies.",
+          "description": "Checks for outdated dev dependencies",
+          "docsUrl": "https://classic.yarnpkg.com/docs/dependency-types#toc-devdependencies",
+          "displayValue": "2 major outdated package versions",
+          "value": 2,
+          "score": 0,
+          "details": {
+            "issues": [
+              {
+                "message": "Package [`eslint`](https://eslint.org) requires a **major** update from **9.39.5** to **10.14.0**.",
+                "severity": "error"
+              },
+              {
+                "message": "Package [`minimist`](https://github.com/minimistjs/minimist) requires a **major** update from **0.0.8** to **1.2.8**.",
+                "severity": "error"
+              }
+            ]
+          }
+        }
+      ],
+      "groups": [
+        {
+          "slug": "npm-audit",
+          "refs": [
+            {
+              "slug": "npm-audit-prod",
+              "weight": 80
+            },
+            {
+              "slug": "npm-audit-dev",
+              "weight": 15
+            }
+          ],
+          "title": "npm audit",
+          "description": "Group containing npm vulnerabilities.",
+          "docsUrl": "https://docs.npmjs.com/cli/commands/npm-audit"
+        },
+        {
+          "slug": "npm-outdated",
+          "refs": [
+            {
+              "slug": "npm-outdated-prod",
+              "weight": 80
+            },
+            {
+              "slug": "npm-outdated-dev",
+              "weight": 15
+            }
+          ],
+          "title": "npm outdated dependencies",
+          "description": "Group containing outdated npm dependencies.",
+          "docsUrl": "https://docs.npmjs.com/cli/commands/npm-outdated"
+        }
+      ]
+    },
+    {
+      "packageName": "@code-pushup/eslint-plugin",
+      "version": "0.126.4",
+      "title": "ESLint",
+      "description": "Official Code PushUp ESLint plugin",
+      "docsUrl": "https://www.npmjs.com/package/@code-pushup/eslint-plugin",
+      "slug": "eslint",
+      "icon": "eslint",
+      "date": "2026-11-06T10:24:14.488Z",
+      "duration": 2254,
+      "audits": [
+        {
+          "slug": "no-console-9b874a94de5d65c6",
+          "title": "Disallow the use of `console`",
+          "description": "ESLint rule **no-console**.",
+          "docsUrl": "https://eslint.org/docs/latest/rules/no-console",
+          "displayValue": "1 warning",
+          "value": 1,
+          "score": 0,
+          "details": {
+            "issues": [
+              {
+                "message": "Unexpected console statement.",
+                "severity": "warning",
+                "source": {
+                  "file": "src/demo.js",
+                  "position": {
+                    "startLine": 4,
+                    "startColumn": 5,
+                    "endLine": 4,
+                    "endColumn": 16
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "slug": "no-unused-vars",
+          "title": "Disallow unused variables",
+          "description": "ESLint rule **no-unused-vars**.",
+          "docsUrl": "https://eslint.org/docs/latest/rules/no-unused-vars",
+          "displayValue": "1 error",
+          "value": 1,
+          "score": 0,
+          "details": {
+            "issues": [
+              {
+                "message": "'unused' is assigned a value but never used.",
+                "severity": "error",
+                "source": {
+                  "file": "src/demo.js",
+                  "position": {
+                    "startLine": 2,
+                    "startColumn": 9,
+                    "endLine": 2,
+                    "endColumn": 15
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "groups": [
+        {
+          "slug": "problems",
+          "refs": [
+            {
+              "slug": "no-unused-vars",
+              "weight": 1
+            }
+          ],
+          "title": "Problems",
+          "description": "Code that either will cause an error or may cause confusing behavior. Developers should consider this a high priority to resolve."
+        },
+        {
+          "slug": "suggestions",
+          "refs": [
+            {
+              "slug": "no-console-9b874a94de5d65c6",
+              "weight": 1
+            }
+          ],
+          "title": "Suggestions",
+          "description": "Something that could be done in a better way but no errors will occur if the code isn't changed."
+        }
+      ]
+    },
+    {
+      "packageName": "@code-pushup/coverage-plugin",
+      "version": "0.126.4",
+      "title": "Code coverage",
+      "description": "Official Code PushUp code coverage plugin.",
+      "docsUrl": "https://www.npmjs.com/package/@code-pushup/coverage-plugin/",
+      "slug": "coverage",
+      "icon": "folder-coverage-open",
+      "date": "2026-11-06T10:24:16.844Z",
+      "duration": 85,
+      "audits": [
+        {
+          "slug": "function-coverage",
+          "title": "Function coverage",
+          "description": "Measures how many functions were called in at least one test.",
+          "displayValue": "100 %",
+          "value": 100,
+          "score": 1,
+          "details": {
+            "trees": [
+              {
+                "title": "Function coverage",
+                "type": "coverage",
+                "root": {
+                  "name": ".",
+                  "values": {
+                    "coverage": 1
+                  },
+                  "children": [
+                    {
+                      "name": "src",
+                      "values": {
+                        "coverage": 1
+                      },
+                      "children": [
+                        {
+                          "name": "demo.js",
+                          "values": {
+                            "coverage": 1,
+                            "missing": []
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "slug": "branch-coverage",
+          "title": "Branch coverage",
+          "description": "Measures how many branches were executed after conditional statements in at least one test.",
+          "displayValue": "50 %",
+          "value": 50,
+          "score": 0.5,
+          "details": {
+            "trees": [
+              {
+                "title": "Branch coverage",
+                "type": "coverage",
+                "root": {
+                  "name": ".",
+                  "values": {
+                    "coverage": 0.5
+                  },
+                  "children": [
+                    {
+                      "name": "src",
+                      "values": {
+                        "coverage": 0.5
+                      },
+                      "children": [
+                        {
+                          "name": "demo.js",
+                          "values": {
+                            "coverage": 0.5,
+                            "missing": [
+                              {
+                                "startLine": 3,
+                                "name": "0",
+                                "kind": "branch"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "slug": "line-coverage",
+          "title": "Line coverage",
+          "description": "Measures how many lines of code were executed in at least one test.",
+          "displayValue": "66.7 %",
+          "value": 66.66666666666666,
+          "score": 0.6667,
+          "details": {
+            "trees": [
+              {
+                "title": "Line coverage",
+                "type": "coverage",
+                "root": {
+                  "name": ".",
+                  "values": {
+                    "coverage": 0.6666666666666666
+                  },
+                  "children": [
+                    {
+                      "name": "src",
+                      "values": {
+                        "coverage": 0.6666666666666666
+                      },
+                      "children": [
+                        {
+                          "name": "demo.js",
+                          "values": {
+                            "coverage": 0.6666666666666666,
+                            "missing": [
+                              {
+                                "startLine": 4
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "groups": [
+        {
+          "slug": "coverage",
+          "refs": [
+            {
+              "slug": "function-coverage",
+              "weight": 6
+            },
+            {
+              "slug": "branch-coverage",
+              "weight": 3
+            },
+            {
+              "slug": "line-coverage",
+              "weight": 1
+            }
+          ],
+          "title": "Code coverage metrics",
+          "description": "Group containing all defined coverage types as audits."
+        }
+      ]
+    }
+  ],
+  "commit": null
+}
