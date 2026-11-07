@@ -27,6 +27,7 @@ export interface PluginRequest {
   module: string;
   options: unknown;
   outputDir: string;
+  temporaryGit: boolean;
 }
 
 export type PluginOutcome = { report: PluginReport } | {
@@ -139,7 +140,12 @@ async function runPlugin(
       }
     });
   });
-  const request: PluginRequest = { module: task.module, options: task.options, outputDir };
+  const request: PluginRequest = {
+    module: task.module,
+    options: task.options,
+    outputDir,
+    temporaryGit: env !== undefined,
+  };
   try {
     child.send(request);
   } catch (error) {

@@ -1,5 +1,5 @@
-import { executePlugin } from '@code-pushup/core';
 import { pluginReportSchema } from '@code-pushup/models';
+import { register } from 'node:module';
 import { inspect } from 'node:util';
 import { CollectorRunError } from '../collectors/code-pushup.js';
 import type { GuardedPluginModule, PluginOutcome, PluginRequest } from './plugin-guard.js';
@@ -11,6 +11,7 @@ async function execute(request: PluginRequest): Promise<PluginOutcome> {
     if ('code' in prepared) {
       return { problem: prepared };
     }
+    const { executePlugin } = await import('@code-pushup/core');
     const report = await executePlugin(prepared, {
       cache: { read: false, write: false },
       persist: { outputDir: request.outputDir },
@@ -42,6 +43,9 @@ async function execute(request: PluginRequest): Promise<PluginOutcome> {
 
 process.once('message', async (request: PluginRequest) => {
   try {
+    if (request.temporaryGit) {
+      register('./temporary-git-hook.js', import.meta.url);
+    }
     const outcome = await execute(request);
     process.send?.(outcome, (error) => {
       if (error) {

@@ -77,7 +77,8 @@ jobs:
           npm version "$BUMP" --preid beta -m "chore(release): %s"
           echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - run: npm publish --tag "${{ steps.meta.outputs.dist_tag }}"
+      - run: npm run pack:release
+      - run: npm publish "./frontis-$(node -p "require('./package.json').version").tgz" --tag "${{ steps.meta.outputs.dist_tag }}"
 
       - name: Push commit and tag
         run: git push --atomic origin "HEAD:$BRANCH" "${{ steps.version.outputs.tag }}"
