@@ -3,6 +3,8 @@ export type { RunOptions } from './core/index.js';
 export { CollectorRunError, createCollectorRunner } from './collectors/code-pushup.js';
 export { collectKnip, parseKnipReport } from './collectors/knip.js';
 export type { KnipData } from './collectors/knip.js';
+export { collectPrettier } from './collectors/prettier.js';
+export type { PrettierData } from './collectors/prettier.js';
 export { collectProjectInfo } from './collectors/project-info.js';
 export type { PackageManager, ProjectInfo } from './collectors/project-info.js';
 export type {

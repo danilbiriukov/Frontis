@@ -28,6 +28,7 @@
     "@types/node": "22.20.5",
     "knip": "6.43.0",
     "oxlint": "1.87.0",
+    "prettier": "3.9.10",
     "typescript": "7.0.2"
   },
   "dependencies": {
