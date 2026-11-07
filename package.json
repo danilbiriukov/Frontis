@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "@types/semver": "7.8.0",
     "knip": "6.43.0",
     "oxlint": "1.87.0",
     "prettier": "3.9.10",
@@ -34,7 +35,8 @@
   "dependencies": {
     "@code-pushup/core": "0.126.4",
     "@code-pushup/models": "0.126.4",
-    "jiti": "2.7.0"
+    "jiti": "2.7.0",
+    "semver": "7.8.5"
   },
   "homepage": "https://github.com/danilbiriukov/Frontis#readme",
   "repository": {

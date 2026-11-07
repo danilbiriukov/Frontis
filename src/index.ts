@@ -5,6 +5,8 @@ export { createImportMapCollector, findImports, selectMostOutdated } from './col
 export type { ImportMapData, ImportMapOptions, OutdatedPackage } from './collectors/import-map.js';
 export { collectKnip, parseKnipReport } from './collectors/knip.js';
 export type { KnipData } from './collectors/knip.js';
+export { createNodeVersionCollector, NODE_RELEASES_URL, parseReleases } from './collectors/node-version.js';
+export type { NodeRelease, NodeVersionData, NodeVersionOptions } from './collectors/node-version.js';
 export { collectPrettier } from './collectors/prettier.js';
 export type { PrettierData } from './collectors/prettier.js';
 export { collectProjectInfo } from './collectors/project-info.js';
