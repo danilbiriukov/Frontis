@@ -38,6 +38,12 @@
 - `src/plugins` [плагины Frontis для Code PushUp](docs/frontis-plugins.md)
 - `src/report` сборка HTML-отчёта
 
+## Публикация в npm
+
+1. Обновите версию через `npm version <версия> --no-git-tag-version` и включите `package.json` и `package-lock.json` в PR. Для стабильного выпуска направьте PR в `main`, для предварительного выпуска с версией вида `0.1.0-beta.0` используйте ветку `release/*`.
+2. После слияния создайте тег `v<версия>` на текущем коммите целевой ветки с новой версией и отправьте тег в GitHub.
+3. Откройте **Actions → Release → Run workflow** и выберите целевую ветку. Workflow проверит тег, соберёт архив и опубликует его через npm Trusted Publishing. Стабильные выпуски получают метку `latest`, предварительные получают `next`.
+
 ## Лицензия
 
 Apache 2.0

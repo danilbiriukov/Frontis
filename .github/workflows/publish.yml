@@ -1,84 +1,97 @@
-# .github/workflows/publish.yml
 name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      bump:
-        description: 'main: patch/minor/major; release/*: pre*'
-        type: choice
-        required: true
-        default: patch
-        options:
-          - patch
-          - minor
-          - major
-          - prepatch
-          - preminor
-          - premajor
-          - prerelease
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
+  prepare:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-latest
-    environment: npm
-    env:
-      BUMP: ${{ inputs.bump }}
-      BRANCH: ${{ github.ref_name }}
+    outputs:
+      archive: ${{ steps.meta.outputs.archive }}
+      dist_tag: ${{ steps.meta.outputs.dist_tag }}
     steps:
-      - name: Resolve dist-tag
-        id: meta
-        run: |
-          if [ "$BRANCH" = "main" ]; then
-            case "$BUMP" in
-              patch|minor|major) ;;
-              *) echo "::error::Из main можно выпускать только patch/minor/major"; exit 1 ;;
-            esac
-            echo "dist_tag=latest" >> "$GITHUB_OUTPUT"
-          else
-            case "$BUMP" in
-              pre*) ;;
-              *) echo "::error::Из release/* можно выпускать только пре-релизы"; exit 1 ;;
-            esac
-            echo "dist_tag=next" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.ref_name }}
           fetch-depth: 0
-          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: npm
-
-      - run: npm install -g npm@latest
+          package-manager-cache: false
 
       - run: npm ci
 
-      - run: npm test --if-present
-
-      - name: Bump version
-        id: version
+      - name: Проверить версию и тег релиза
+        id: meta
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          npm version "$BUMP" --preid beta -m "chore(release): %s"
-          echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          version=$(node -e '
+            const { valid } = require("semver");
+            const version = require("./package.json").version;
+            if (valid(version) !== version) {
+              throw new Error("Некорректная версия пакета");
+            }
+            console.log(version);
+          ')
+          if [[ "$(git rev-parse --verify --quiet "refs/tags/v$version^{commit}")" != "$GITHUB_SHA" ]]; then
+            echo "::error::Тег v$version должен указывать на коммит запуска"
+            exit 1
+          fi
 
+          case "$GITHUB_REF_NAME:$version" in
+            main:*-*)
+              echo "::error::Из main выпускаются только стабильные версии"
+              exit 1
+              ;;
+            main:*) dist_tag=latest ;;
+            release/*:*-*) dist_tag=next ;;
+            *)
+              echo "::error::Из release/* выпускаются только предварительные версии"
+              exit 1
+              ;;
+          esac
+
+          echo "archive=frontis-$version.tgz" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+
+      - run: npm test
       - run: npm run pack:release
-      - run: npm publish "./frontis-$(node -p "require('./package.json').version").tgz" --tag "${{ steps.meta.outputs.dist_tag }}"
 
-      - name: Push commit and tag
-        run: git push --atomic origin "HEAD:$BRANCH" "${{ steps.version.outputs.tag }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontis-release
+          path: ${{ steps.meta.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frontis-release
+
+      - name: Опубликовать пакет
+        env:
+          ARCHIVE: ${{ needs.prepare.outputs.archive }}
+          DIST_TAG: ${{ needs.prepare.outputs.dist_tag }}
+        run: npm publish "./$ARCHIVE" --tag "$DIST_TAG" --ignore-scripts
