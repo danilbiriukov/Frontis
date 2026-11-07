@@ -21,6 +21,7 @@ export interface IResultIssue extends Issue {
 export interface IResultDetails {
   issues?: IResultIssue[];
   largestFiles?: { file: string; bytes: number }[];
+  rules?: { rule: string; count: number }[];
 }
 
 export interface IResultCheck extends Partial<PluginProblem> {
