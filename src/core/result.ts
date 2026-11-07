@@ -1,5 +1,6 @@
 import type { AuditReport, Report } from '@code-pushup/models';
 import semver from 'semver';
+import { ESLINT_CHECKED_FILES, ESLINT_PARSE_ERRORS } from '../plugins/eslint-evidence.js';
 import type { ModuleName, Thresholds } from './config.js';
 import type { Finding } from './importance.js';
 import type { PluginProblem } from './plugin-guard.js';
@@ -181,17 +182,37 @@ function npmOutdated(report: Report): ICheckEvidence {
 function eslint(report: Report): ICheckEvidence {
   const plugin = 'eslint';
   const audits = selectAudits(report, plugin);
-  const items = issues(plugin, audits);
+  const coverageAudit = findAudit(audits, ESLINT_CHECKED_FILES);
+  const checkedFiles = count(audits, ESLINT_CHECKED_FILES);
+  const parseErrors = count(audits, ESLINT_PARSE_ERRORS);
+  const findingAudits = audits.filter(({ slug }) => slug !== ESLINT_CHECKED_FILES);
+  const parseRef = `${plugin}/${ESLINT_PARSE_ERRORS}`;
+  const items = issues(plugin, findingAudits).sort((a, b) =>
+    Number(b.audit === parseRef) - Number(a.audit === parseRef)
+  );
   const errors = items.filter(({ severity }) => severity === 'error').length;
   const warnings = items.filter(({ severity }) => severity === 'warning').length;
   const findings = lintFindings({ errors, warnings, unformatted: 0 });
+  const rules = (coverageAudit?.details?.table?.rows ?? []).flatMap((row) => {
+    if (Array.isArray(row) || typeof row.rule !== 'string' || !isCount(row.count) || row.count === 0) {
+      return [];
+    }
+    return [{ rule: row.rule, count: row.count }];
+  }).slice(0, 10);
   let problem: PluginProblem | undefined;
   if (audits.length === 0) {
     problem = missingAudit;
-  } else if (audits.some(({ value, details }) =>
-    value !== (details?.issues ?? []).filter(({ severity }) => severity === 'error' || severity === 'warning').length)) {
+  } else if ((coverageAudit !== undefined && checkedFiles === undefined) ||
+    findingAudits.some(({ value, details }) =>
+      value !== (details?.issues ?? []).filter(({ severity }) => severity === 'error' || severity === 'warning').length)) {
     problem = invalidAudit;
-  } else if (findings.length === 0) {
+  } else if (checkedFiles === 0) {
+    problem = {
+      code: 'no-files',
+      reason: 'ESLint не проверил ни одного файла.',
+      action: 'Проверьте конфигурацию ESLint и шаблоны файлов.',
+    };
+  } else if (checkedFiles === undefined && findings.length === 0) {
     problem = {
       code: 'eslint-coverage-unconfirmed',
       reason: 'По аудитам ESLint нельзя определить, проверены ли файлы.',
@@ -201,9 +222,13 @@ function eslint(report: Report): ICheckEvidence {
   return {
     plugin,
     audits,
-    facts: findings.length === 0 ? {} : { errors, warnings },
+    facts: {
+      checkedFiles,
+      parseErrors,
+      ...(checkedFiles || findings.length > 0 ? { errors, warnings } : {}),
+    },
     findings,
-    details: { issues: items },
+    details: { issues: items, rules },
     problem,
   };
 }
@@ -347,10 +372,12 @@ function createCheck(id: TCheckId, evidence: ICheckEvidence, context: IResultCon
   }
   const entries = evidence.details?.issues ?? issues(evidence.plugin, evidence.audits);
   const largestFiles = evidence.details?.largestFiles ?? [];
-  if (entries.length > 0 || largestFiles.length > 0) {
+  const rules = evidence.details?.rules ?? [];
+  if (entries.length > 0 || largestFiles.length > 0 || rules.length > 0) {
     check.details = {
       ...(entries.length > 0 ? { issues: entries.slice(0, 10) } : {}),
       ...(largestFiles.length > 0 ? { largestFiles } : {}),
+      ...(rules.length > 0 ? { rules } : {}),
     };
   }
   return { check, findings: evidence.findings };

@@ -10,6 +10,7 @@ import type { TEngineAdapters } from './types/engine-config.js';
 
 const adapters = {
   knip: new URL('../plugins/knip.js', import.meta.url).href,
+  lint: new URL('../plugins/eslint.js', import.meta.url).href,
   prettier: new URL('../plugins/prettier.js', import.meta.url).href,
   'node-version': new URL('../plugins/node-version.js', import.meta.url).href,
   'build-size': new URL('../plugins/build-size.js', import.meta.url).href,
