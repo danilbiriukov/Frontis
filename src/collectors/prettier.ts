@@ -5,13 +5,15 @@ import { join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Collector, CollectorFailure, CollectorFinding } from './index.js';
 
+type Position = NonNullable<CollectorFinding['source']>['position'];
+
 export interface PrettierData {
   /** Файлы, которые Prettier умеет форматировать и которые не исключены. */
   checkedFiles: number;
   /** Пути от корня проекта, которым нужно форматирование. */
   unformatted: string[];
   /** Файлы, которые Prettier не смог разобрать. */
-  errors: { file: string; message: string }[];
+  errors: { file: string; message: string; position?: Position }[];
   /** Путь к файлу настроек от корня проекта. */
   configFile: string;
   prettierVersion: string;
@@ -36,6 +38,21 @@ function failure(status: CollectorFailure['status'], code: string, reason: strin
 
 function toRelative(projectDir: string, file: string): string {
   return relative(projectDir, file).split(sep).join('/');
+}
+
+function errorPosition(error: unknown): Position {
+  if (!(error instanceof Error) || !('loc' in error)) {
+    return undefined;
+  }
+  const start = (error.loc as { start?: { line?: unknown; column?: unknown } } | undefined)?.start;
+  const line = start?.line;
+  const column = start?.column;
+  if (typeof line !== 'number' || !Number.isInteger(line) || line < 1) {
+    return undefined;
+  }
+  return typeof column === 'number' && Number.isInteger(column) && column > 0
+    ? { startLine: line, startColumn: column }
+    : { startLine: line };
 }
 
 async function loadPrettier(projectDir: string): Promise<PrettierApi | undefined> {
@@ -63,6 +80,9 @@ async function listFiles(prettier: PrettierApi, projectDir: string, ignorePath: 
     for (const entry of entries) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
+        if (dir === projectDir && entry.name === '.frontis') {
+          continue;
+        }
         if (SKIPPED_DIRS.has(entry.name)) continue;
         if ((await prettier.getFileInfo(path, { ignorePath })).ignored) continue;
         await walk(path);
@@ -120,7 +140,9 @@ export const collectPrettier: Collector<PrettierData> = async (context) => {
           unformatted.push(toRelative(projectDir, file));
         }
       } catch (error) {
-        errors.push({ file: toRelative(projectDir, file), message: (error instanceof Error ? error.message : String(error)).split('\n')[0] });
+        const message = (error instanceof Error ? error.message : String(error)).split('\n')[0];
+        const position = errorPosition(error);
+        errors.push({ file: toRelative(projectDir, file), message, ...(position === undefined ? {} : { position }) });
       }
     }
   };
@@ -136,11 +158,11 @@ export const collectPrettier: Collector<PrettierData> = async (context) => {
       severity: 'warning',
       source: { file },
     })),
-    ...errors.map(({ file, message }): CollectorFinding => ({
+    ...errors.map(({ file, message, position }): CollectorFinding => ({
       code: 'prettier-error',
       message: `Prettier не смог разобрать файл: ${message}`,
       severity: 'error',
-      source: { file },
+      source: position === undefined ? { file } : { file, position },
     })),
   ];
   return {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -63,10 +63,39 @@ test('run без конфига — понятное сообщение без �
   }
 });
 
-test('run с пустым конфигом — код 0 и путь к конфигу', () => {
-  const { status, stdout } = frontis(['run'], join(import.meta.dirname, 'fixtures', 'empty'));
-  assert.equal(status, 0);
-  assert.match(stdout, /frontis\.config\.ts/);
+test('run без доступных аудитов возвращает 2 и сохраняет причины', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'frontis.config.mjs'), 'export default {};');
+  const { status, stdout } = frontis(['run'], dir);
+  assert.equal(status, 2);
+  assert.match(stdout, /frontis\.config\.mjs/);
+  assert.match(stdout, /Аудиты Frontis: 0/);
+  const noData = JSON.parse(readFileSync(join(dir, '.frontis', 'no-data.json'), 'utf8'));
+  assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
+    knip: 'knip-not-installed',
+    prettier: 'prettier-not-installed',
+    'node-version': 'no-node-version',
+    'build-size': 'no-build-dir',
+  });
+});
+
+test('run собирает аудиты сборки вне Git и продолжает после пропусков', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'frontis.config.mjs'), "export default { modules: { 'node-version': { enabled: false } } };");
+  mkdirSync(join(dir, 'dist'));
+  writeFileSync(join(dir, 'dist', 'index.js'), 'export {};');
+  const { status, stdout, stderr } = frontis(['run'], dir);
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /Аудиты Frontis: 3\. Модули без данных: 3/);
+  const noData = JSON.parse(readFileSync(join(dir, '.frontis', 'no-data.json'), 'utf8'));
+  assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
+    'node-version': 'disabled',
+    knip: 'knip-not-installed',
+    prettier: 'prettier-not-installed',
+  });
+  assert.equal(existsSync(join(dir, '.git')), false);
 });
 
 test('cli.js запускается напрямую через shebang', { skip: process.platform === 'win32' }, () => {

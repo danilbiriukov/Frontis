@@ -36,6 +36,7 @@ test('prettier: учитываются настройки и исключени�
     'ignored.js': unformatted,
     'vendor/lib.js': unformatted,
     'generated/out.js': unformatted,
+    '.frontis/report.json': '{"generated":true}',
     'notes.txt': 'не форматируется   Prettier\n',
   });
   const result = await collectPrettier({ projectDir });
@@ -77,6 +78,7 @@ test('prettier: файл с синтаксической ошибкой не с�
   assert.equal(result.status, 'ok');
   assert.deepEqual(result.data.errors.map(({ file }) => file), ['broken.js']);
   assert.deepEqual(result.findings.map(({ code, severity }) => [code, severity]), [['prettier-error', 'error']]);
+  assert.deepEqual(result.findings[0].source, { file: 'broken.js', position: { startLine: 1, startColumn: 14 } });
 });
 
 test('prettier: без настроек возвращается «Нет данных»', async (t) => {
