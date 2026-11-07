@@ -76,15 +76,34 @@ async function stopProcessTree(child: ChildProcess): Promise<string | undefined>
   }
 }
 
+async function prepareGitEnvironment(projectDir: string, workDir: string): Promise<NodeJS.ProcessEnv | undefined> {
+  const options = { cwd: projectDir, timeout: 5000, windowsHide: true };
+  try {
+    await execFileAsync('git', ['rev-parse', '--show-toplevel'], options);
+    return undefined;
+  } catch (error) {
+    if ((error as { code?: number | string }).code !== 128) {
+      return undefined;
+    }
+  }
+
+  // Code PushUp требует корень Git даже для аудитов без файлов.
+  const env = { ...process.env, GIT_DIR: join(workDir, 'git'), GIT_WORK_TREE: projectDir };
+  await execFileAsync('git', ['init', '--template='], { ...options, env });
+  return env;
+}
+
 async function runPlugin(
   task: GuardedPlugin,
   projectDir: string,
   outputDir: string,
+  env: NodeJS.ProcessEnv | undefined,
 ): Promise<PluginOutcome> {
   let child: ChildProcess;
   try {
     child = fork(WORKER, {
       cwd: projectDir,
+      env,
       detached: process.platform !== 'win32',
       windowsHide: true,
       execArgv: [],
@@ -158,6 +177,7 @@ async function runPlugin(
 export async function runGuardedPlugins(
   projectDir: string,
   plugins: readonly GuardedPlugin[],
+  preflight: readonly PluginNoData[] = [],
 ): Promise<{ reports: PluginReport[]; noData: PluginNoData[] }> {
   const root = resolve(projectDir);
   const outputDir = join(root, '.frontis');
@@ -165,11 +185,12 @@ export async function runGuardedPlugins(
   const logFile = `logs/${id}.log`;
   const log: string[] = [];
   const reports: PluginReport[] = [];
-  const noData: PluginNoData[] = [];
+  const noData = [...preflight];
 
   await mkdir(outputDir, { recursive: true });
   const workDir = await mkdtemp(join(outputDir, 'work-'));
   try {
+    const env = plugins.some(({ enabled }) => enabled) ? await prepareGitEnvironment(root, workDir) : undefined;
     for (const [index, plugin] of plugins.entries()) {
       if (!plugin.enabled) {
         noData.push({
@@ -182,7 +203,7 @@ export async function runGuardedPlugins(
       }
       const pluginDir = join(workDir, String(index));
       await mkdir(pluginDir);
-      const outcome = await runPlugin(plugin, root, pluginDir);
+      const outcome = await runPlugin(plugin, root, pluginDir, env);
       if ('report' in outcome) {
         reports.push(outcome.report);
       } else {

@@ -31,3 +31,7 @@ export type {
   ResolvedConfig,
   ResolvedModuleConfig,
 } from './core/config.js';
+export { createBuildSizePlugin } from './plugins/build-size.js';
+export { createKnipPlugin } from './plugins/knip.js';
+export { createNodeVersionPlugin } from './plugins/node-version.js';
+export { createPrettierPlugin } from './plugins/prettier.js';
