@@ -54,6 +54,19 @@ function plugin(slug, audits) {
   };
 }
 
+function withNpmAudit(prod, dev) {
+  return reportSchema.parse({
+    ...report,
+    plugins: [
+      ...report.plugins,
+      plugin('js-packages', [
+        { slug: 'npm-audit-prod', value: prod.length, details: { issues: prod } },
+        { slug: 'npm-audit-dev', value: dev.length, details: { issues: dev } },
+      ]),
+    ],
+  });
+}
+
 function withOutdatedEvidence(prod, dev, audits = []) {
   return reportSchema.parse({
     ...report,
@@ -151,12 +164,92 @@ test('аудиты #39 преобразуются в уровни, версии 
   assert.equal(lodash.targetVersion, '4.18.1');
   assert.equal(check(result, 'audit').facts.high, 1);
   assert.equal(check(result, 'audit').facts.critical, 1);
-  assert.equal(check(result, 'audit').details.issues.find((issue) => issue.group === 'dev').level, 'critical');
+  const vulnerabilities = check(result, 'audit').details.issues;
+  assert.deepEqual(vulnerabilities.find(({ group }) => group === 'prod').fix, {
+    available: true, package: 'lodash', version: '4.18.1', breaking: false,
+  });
+  const minimist = vulnerabilities.find(({ group }) => group === 'dev');
+  assert.equal(minimist.level, 'critical');
+  assert.deepEqual(minimist.fix, { available: true, package: 'minimist', version: '1.2.8', breaking: true });
   assert.deepEqual(check(result, 'lint').facts, { errors: 1, warnings: 1 });
   assert.deepEqual(check(result, 'coverage').facts, {
     lines: 66.66666666666666, branches: 50, functions: 100,
     warn: 65, target: 90, gapToWarn: 0, gapToTarget: 90 - 66.66666666666666,
   });
+});
+
+test('npm audit сохраняет транзитивный пакет, исходный уровень и доступность исправления', () => {
+  const auditReport = withNpmAudit([
+    {
+      message: "`@scope/parent`'s dependency `child` has a **moderate** vulnerability in **all** versions. Fix is available.",
+      severity: 'warning',
+    },
+    {
+      message: "`helper` dependency has a **info** vulnerability in versions **<2.0.0**. More information: [Fix is available.](https://example.com/advisory)",
+      severity: 'info',
+    },
+  ], [{
+    message: "`dev-tool` dependency has a **low** vulnerability in versions **<3.1.0**. Consult the advisory.",
+    severity: 'info',
+  }]);
+  const result = createResult(auditReport, context());
+  const audit = check(result, 'audit');
+  assert.deepEqual(audit.facts, { production: 2, development: 1, critical: 0, high: 0, moderate: 1, low: 1, info: 1 });
+  assert.equal(audit.status, 'plan');
+  const [child, helper, devTool] = audit.details.issues;
+  assert.equal(child.group, 'prod');
+  assert.equal(child.package, 'child');
+  assert.equal(child.parentPackage, '@scope/parent');
+  assert.equal(child.level, 'moderate');
+  assert.deepEqual(child.fix, { available: true });
+  assert.equal(helper.level, 'info');
+  assert.deepEqual(helper.fix, { available: false });
+  assert.equal(devTool.group, 'dev');
+  assert.equal(devTool.package, 'dev-tool');
+  assert.equal(devTool.level, 'low');
+  assert.equal(devTool.fix, undefined);
+  assert.deepEqual(indicator(result, 'audit').findings.map(({ kind, importance, now }) => [kind, importance, now]), [
+    ['audit.moderate', 'mid', '1'], ['audit.low', 'low', '2'],
+  ]);
+});
+
+test('неизвестное сообщение npm audit сохраняет важность по severity без подстановки исходных данных', () => {
+  const auditReport = withNpmAudit([{ message: 'Unexpected npm issue format', severity: 'error' }], []);
+  const result = createResult(auditReport, context());
+  const audit = check(result, 'audit');
+  assert.equal(audit.status, 'fix');
+  assert.equal(audit.facts.high, 1);
+  assert.deepEqual(audit.details.issues, [{
+    audit: 'js-packages/npm-audit-prod', group: 'prod',
+    message: 'Unexpected npm issue format', severity: 'error',
+  }]);
+});
+
+test('успешные нули npm audit учитываются в оценке, сбой реестра сохраняет отдельную причину', () => {
+  const clean = createResult(withNpmAudit([], []), context());
+  assert.equal(indicator(clean, 'audit').status, 'ok');
+  assert.equal(clean.score.known, 4);
+  assert.deepEqual(check(clean, 'audit').facts, {
+    production: 0, development: 0, critical: 0, high: 0, moderate: 0, low: 0, info: 0,
+  });
+
+  const withoutAudit = withOutdatedEvidence(
+    { state: 'verified', comparable: 2 }, { state: 'empty', comparable: 0 },
+    [outdatedAudit('prod', [])],
+  );
+  const reason = 'npm-реестр недоступен.';
+  const failed = createResult(withoutAudit, context({ noData: [{
+    plugin: 'audit',
+    code: 'registry-unavailable',
+    reason,
+    action: 'Проверьте доступ к npm-реестру.',
+  }] }));
+  assert.equal(check(failed, 'audit').status, 'no-data');
+  assert.equal(check(failed, 'audit').code, 'registry-unavailable');
+  assert.equal(check(failed, 'audit').reason, reason);
+  assert.deepEqual(check(failed, 'audit').facts, {});
+  assert.equal(indicator(failed, 'outdated').status, 'ok');
+  assert.equal(check(failed, 'outdated').facts.productionOutdatedPercent, 0);
 });
 
 test('покрытие хранит дату LCOV, настроенные пороги и разрывы в процентных пунктах', () => {

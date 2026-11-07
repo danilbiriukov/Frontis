@@ -13,7 +13,9 @@ export interface IResultIssue extends Issue {
   audit: string;
   group?: 'prod' | 'dev';
   package?: string;
+  parentPackage?: string;
   level?: string;
+  fix?: { available: boolean; package?: string; version?: string; breaking?: boolean };
   currentVersion?: string;
   targetVersion?: string;
 }
