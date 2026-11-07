@@ -1,4 +1,5 @@
 import { BYTES_IN_MB } from '../collectors/build-size.js';
+import type { NodeVersionData } from '../collectors/node-version.js';
 import type { ModuleName, Thresholds } from './config.js';
 import type { Finding, Importance } from './importance.js';
 import type { NoData } from './recommendations.js';
@@ -228,56 +229,28 @@ export function buildSizeFindings(bytes: number, thresholds: Thresholds['buildSi
   ];
 }
 
-interface Version {
-  text: string;
-  parts: number[];
-}
-
-const VERSION = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/;
-
-function parseVersion(raw: string): Version {
-  const match = VERSION.exec(raw.trim());
-  if (match === null) throw new RangeError(`Не удалось разобрать версию Node.js: ${raw}`);
-  const parts = match.slice(1).flatMap((part) => (part === undefined ? [] : [Number(part)]));
-  return { text: parts.join('.'), parts };
-}
-
-const NODE_LAG: readonly { metric: string; importance: Importance; description: string }[] = [
-  {
+const NODE_LAG: Record<NonNullable<NodeVersionData['lag']>, { metric: string; importance: Importance; description: string }> = {
+  major: {
     metric: 'node.major',
     importance: 'high',
     description: 'Переведите проект на актуальную LTS-версию Node.js: обновите .nvmrc и поле engines.',
   },
-  {
+  minor: {
     metric: 'node.minor',
     importance: 'mid',
     description: 'Обновите Node.js до последней минорной версии LTS.',
   },
-  {
+  patch: {
     metric: 'node.patch',
     importance: 'low',
     description: 'Обновите Node.js до последней патч-версии LTS.',
   },
-];
+};
 
-/**
- * Версия Node.js проекта (из .nvmrc или engines) против последней LTS
- * по правилам семантических версий. Если в проекте указаны не все части
- * версии, например "24", сравниваются только указанные.
- */
-export function nodeFindings(projectVersion: string, latestLts: string): Finding[] {
-  const project = parseVersion(projectVersion);
-  const lts = parseVersion(latestLts);
-
-  for (const [index, lag] of NODE_LAG.entries()) {
-    const own = project.parts[index];
-    const latest = lts.parts[index];
-    if (own === undefined || latest === undefined || own > latest) return [];
-    if (own < latest) {
-      return [{ module: 'node-version', ...lag, current: project.text, target: lts.text }];
-    }
-  }
-  return [];
+/** Отставание версии Node.js проекта от последней LTS по данным сборщика node-version. */
+export function nodeFindings(data: Pick<NodeVersionData, 'version' | 'latestLts' | 'lag'>): Finding[] {
+  if (data.lag === null) return [];
+  return [{ module: 'node-version', ...NODE_LAG[data.lag], current: data.version, target: data.latestLts.version }];
 }
 
 /** Список релизов nodejs.org не получен: своего зашитого списка версий нет. */
