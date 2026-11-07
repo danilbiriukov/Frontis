@@ -1,5 +1,7 @@
 export { run } from './core/index.js';
 export type { RunOptions } from './core/index.js';
+export { createBuildSizeCollector } from './collectors/build-size.js';
+export type { BuildSizeData, BuildSizeOptions } from './collectors/build-size.js';
 export { CollectorRunError, createCollectorRunner } from './collectors/code-pushup.js';
 export { createImportMapCollector, findImports, selectMostOutdated } from './collectors/import-map.js';
 export type { ImportMapData, ImportMapOptions, OutdatedPackage } from './collectors/import-map.js';

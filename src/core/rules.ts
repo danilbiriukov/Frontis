@@ -1,3 +1,4 @@
+import { BYTES_IN_MB } from '../collectors/build-size.js';
 import type { ModuleName, Thresholds } from './config.js';
 import type { Finding, Importance } from './importance.js';
 import type { NoData } from './recommendations.js';
@@ -13,8 +14,6 @@ const formatCount = (count: number): string => numberFormat.format(count);
 // а 5,02 МБ сверх предела в 5 МБ — как 5 МБ
 const tenthsDown = (value: number): number => Math.floor(Number((value * 10).toFixed(6))) / 10;
 const tenthsUp = (value: number): number => Math.ceil(Number((value * 10).toFixed(6))) / 10;
-
-const BYTES_IN_MB = 1024 * 1024;
 
 interface CountRule<T> {
   key: keyof T;
