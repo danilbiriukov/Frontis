@@ -2,7 +2,7 @@
 import { run } from './core/index.js';
 import { frontisVersion } from './core/package-info.js';
 
-const HELP = `frontis: аудит фронтенд-проекта в один HTML-отчёт
+const HELP = `frontis: аудит фронтенд-проекта с результатами в JSON
 
 Использование:
   frontis run          запустить проверки в текущей папке

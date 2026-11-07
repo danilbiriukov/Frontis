@@ -1,8 +1,8 @@
 {
   "name": "frontis",
   "type": "module",
-  "version": "0.0.2",
-  "description": "Консольная утилита для аудита фронтенд-проекта: собирает результаты в один HTML-отчёт",
+  "version": "0.0.3",
+  "description": "Консольная утилита для аудита фронтенд-проектов через Code PushUp с результатами в JSON",
   "scripts": {
     "clean": "node -e \"import('node:fs').then(f => f.rmSync('dist', { recursive: true, force: true }))\"",
     "build": "npm run clean && tsc && node -e \"import('node:fs').then(f => f.chmodSync('dist/cli.js', 0o755))\"",
