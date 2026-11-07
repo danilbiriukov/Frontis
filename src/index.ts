@@ -7,6 +7,8 @@ export { collectPrettier } from './collectors/prettier.js';
 export type { PrettierData } from './collectors/prettier.js';
 export { collectProjectInfo } from './collectors/project-info.js';
 export type { PackageManager, ProjectInfo } from './collectors/project-info.js';
+export { createTestResultsCollector, parseTestReport } from './collectors/test-results.js';
+export type { TestResultsData, TestResultsOptions } from './collectors/test-results.js';
 export type {
   Collector,
   CollectorContext,
