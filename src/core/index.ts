@@ -1,5 +1,4 @@
-import { resolveConfig } from './config.js';
-import { findConfigFile, loadConfigFile } from './config-file.js';
+import { loadEngineConfig } from './engine-config.js';
 import { ConfigError } from './errors.js';
 
 export interface RunOptions {
@@ -8,8 +7,7 @@ export interface RunOptions {
 
 export async function run(options: RunOptions): Promise<number> {
   try {
-    const configPath = findConfigFile(options.cwd);
-    resolveConfig(await loadConfigFile(configPath), configPath);
+    const { configPath } = await loadEngineConfig(options.cwd);
     console.log(`Конфигурация: ${configPath}`);
   } catch (error) {
     if (error instanceof ConfigError) {
