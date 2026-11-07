@@ -75,7 +75,7 @@ test('run без доступных аудитов возвращает 2 и с�
   const { status, stdout } = frontis(['run'], dir);
   assert.equal(status, 2);
   assert.match(stdout, /frontis\.config\.mjs/);
-  assert.match(stdout, /Аудиты Frontis: 0/);
+  assert.match(stdout, /Аудиты Frontis: 0\. Модули без данных: 8\. Успешные проверки: 0\. Ошибки: 0\./);
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
     outdated: 'no-package-json',
@@ -99,7 +99,11 @@ test('run собирает аудиты сборки вне Git и продол�
   writeFileSync(join(dir, 'dist', 'index.js'), 'export {};');
   const { status, stdout, stderr } = frontis(['run'], dir);
   assert.equal(status, 0, stderr);
-  assert.match(stdout, /Аудиты Frontis: 3\. Модули без данных: 7/);
+  assert.match(stdout, /^\[build-size\] ожидает$/m);
+  assert.match(stdout, /\[build-size\] запущен\r?\n\[build-size\] готово/);
+  assert.match(stdout, /^\[lint\] нет данных$/m);
+  assert.match(stdout, /Аудиты Frontis: 3\. Модули без данных: 7\. Успешные проверки: 1\. Ошибки: 0\./);
+  assert.equal(stdout.includes('\x1b'), false);
   const outputDir = join(dir, '.frontis');
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
@@ -122,6 +126,18 @@ test('run собирает аудиты сборки вне Git и продол�
   assert.equal(result.score.known, 1);
   assert.equal(result.indicators.find(({ id }) => id === 'buildSize').status, 'ok');
   assert.equal(existsSync(join(dir, '.git')), false);
+});
+
+test('run возвращает 2, если каталог результатов недоступен', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'frontis.config.mjs'), 'export default {};');
+  const outputPath = join(dir, '.frontis');
+  writeFileSync(outputPath, 'занято');
+  const { status, stderr } = frontis(['run'], dir);
+  assert.equal(status, 2);
+  assert.match(stderr, /\.frontis/);
+  assert.equal(readFileSync(outputPath, 'utf8'), 'занято');
 });
 
 test('cli.js запускается напрямую через shebang', { skip: process.platform === 'win32' }, () => {

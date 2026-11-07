@@ -24,10 +24,11 @@ test('охранник продолжает запуск после ошибок
     task('unavailable', { mode: 'unavailable' }),
     task('crash', { mode: 'crash' }),
     task('collector-error', { mode: 'collector-error' }),
-    task('timeout', { mode: 'hang', timeoutMs: 1600 }),
+    task('timeout', { mode: 'hang', timeoutMs: 5000 }),
     task('invalid', { mode: 'invalid' }),
     task('zero-files', { checkedFiles: 0 }),
-    task('success', { checkedFiles: 1 }),
+    task('skipped', { mode: 'skipped' }),
+    task('success', { mode: 'logged-success', checkedFiles: 1 }),
   ]);
 
   assert.deepEqual(result.noData.map(({ plugin, code }) => [plugin, code]), [
@@ -38,6 +39,7 @@ test('охранник продолжает запуск после ошибок
     ['timeout', 'timeout'],
     ['invalid', 'invalid-result'],
     ['zero-files', 'no-files'],
+    ['skipped', 'no-audits'],
   ]);
   assert(result.noData.every(({ reason, action }) => reason.length > 0 && action.length > 0));
   assert.equal(result.noData[0].logFile, undefined);
@@ -48,12 +50,13 @@ test('охранник продолжает запуск после ошибок
   assert.match(log, /Техническая ошибка контрольного плагина/);
   assert.match(log, /Исходная ошибка сборщика/);
   assert.match(log, /Запущен дочерний процесс: \d+/);
+  assert.match(log, /Технический вывод успешной проверки/);
 
   const next = await runGuardedPlugins(projectDir, [task('success', { checkedFiles: 1 })]);
   assert.deepEqual(next.noData, []);
   assert.deepEqual(JSON.parse(await readFile(noDataFile, 'utf8')), []);
   assert.deepEqual((await readdir(outputDir)).sort(), ['logs', 'no-data.json']);
 
-  await setTimeout(2300);
+  await setTimeout(5800);
   await assert.rejects(stat(join(projectDir, 'late.txt')), { code: 'ENOENT' });
 });

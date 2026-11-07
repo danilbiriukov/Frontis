@@ -6,6 +6,7 @@ import { createReport } from './report.js';
 import { createResult } from './result.js';
 import { withCurrentRun, writeResultArtifacts } from './run-artifacts.js';
 import { runPlannedPlugins } from './run-plan.js';
+import { createRunProgress } from './run-progress.js';
 import type { TEngineAdapters } from './types/engine-config.js';
 
 const adapters = {
@@ -33,16 +34,16 @@ export async function run(options: RunOptions): Promise<number> {
       const { projectDir, modules, thresholds } = plan.config;
       const projectInfo = plan.projectInfo.status === 'ok' ? plan.projectInfo.data : undefined;
       const git = projectInfo === undefined ? await readProjectGit({ projectDir }) : projectInfo.git;
-      const { reports, noData } = await runPlannedPlugins(plan);
+      const progress = createRunProgress();
+      const { reports, noData } = await runPlannedPlugins(plan, progress.update);
       const report = createReport({
         plugins: reports,
         commit: git?.commit ?? null,
         runAt,
         durationMs: Math.round(performance.now() - start),
       });
-      const audits = report?.plugins.reduce((count, plugin) => count + plugin.audits.length, 0) ?? 0;
-      console.log(`Аудиты Frontis: ${audits}. Модули без данных: ${noData.length}.`);
       if (report === undefined) {
+        progress.summary(0);
         return 2;
       }
       const result = createResult(report, {
@@ -53,6 +54,8 @@ export async function run(options: RunOptions): Promise<number> {
         noData,
       });
       await writeResultArtifacts(plan.outputDir, report, result);
+      const audits = report.plugins.reduce((count, plugin) => count + plugin.audits.length, 0);
+      progress.summary(audits);
       return 0;
     });
   } catch (error) {

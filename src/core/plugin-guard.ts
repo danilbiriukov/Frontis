@@ -7,6 +7,7 @@ import { setTimeout } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import type { CollectorFailure } from '../collectors/index.js';
 import type { ResolvedModuleConfig } from './config.js';
+import type { TPluginProgress } from './types/run.js';
 
 export interface GuardedPlugin extends ResolvedModuleConfig {
   slug: string;
@@ -30,10 +31,10 @@ export interface PluginRequest {
   temporaryGit: boolean;
 }
 
-export type PluginOutcome = { report: PluginReport } | {
+export type PluginOutcome = ({ report: PluginReport } | {
   problem: PluginProblem;
-  diagnostic?: string;
-};
+  status: CollectorFailure['status'];
+}) & { diagnostic?: string };
 
 export interface PluginNoData extends PluginProblem {
   plugin: string;
@@ -46,6 +47,7 @@ const MAX_OUTPUT = 64 * 1024;
 
 function failed(diagnostic: string): PluginOutcome {
   return {
+    status: 'error',
     problem: {
       code: 'plugin-error',
       reason: 'Плагин завершился с ошибкой.',
@@ -166,6 +168,7 @@ async function runPlugin(
     }
     child.unref();
     outcome = {
+      status: 'error',
       problem: {
         code: 'timeout',
         reason: `Плагин не завершился за ${task.timeoutMs} мс.`,
@@ -174,16 +177,14 @@ async function runPlugin(
       diagnostic: [processError?.stack, stopError].filter(Boolean).join('\n'),
     };
   }
-  if ('problem' in outcome) {
-    return { ...outcome, diagnostic: [outcome.diagnostic, output.trimEnd()].filter(Boolean).join('\n') };
-  }
-  return outcome;
+  return { ...outcome, diagnostic: [outcome.diagnostic, output.trimEnd()].filter(Boolean).join('\n') };
 }
 
 export async function runGuardedPlugins(
   projectDir: string,
   plugins: readonly GuardedPlugin[],
   preflight: readonly PluginNoData[] = [],
+  onProgress?: TPluginProgress,
 ): Promise<{ reports: PluginReport[]; noData: PluginNoData[] }> {
   const root = resolve(projectDir);
   const outputDir = join(root, '.frontis');
@@ -196,6 +197,14 @@ export async function runGuardedPlugins(
   await mkdir(outputDir, { recursive: true });
   const workDir = await mkdtemp(join(outputDir, 'work-'));
   try {
+    for (const { slug, enabled } of plugins) {
+      if (enabled) {
+        onProgress?.(slug, 'waiting');
+      }
+    }
+    for (const { plugin } of preflight) {
+      onProgress?.(plugin, 'no-data');
+    }
     const env = plugins.some(({ enabled }) => enabled) ? await prepareGitEnvironment(root, workDir) : undefined;
     for (const [index, plugin] of plugins.entries()) {
       if (!plugin.enabled) {
@@ -205,20 +214,27 @@ export async function runGuardedPlugins(
           reason: 'Плагин отключён в конфигурации.',
           action: 'Включите модуль, если нужна эта проверка.',
         });
+        onProgress?.(plugin.slug, 'no-data');
         continue;
       }
       const pluginDir = join(workDir, String(index));
       await mkdir(pluginDir);
+      onProgress?.(plugin.slug, 'running');
       const outcome = await runPlugin(plugin, root, pluginDir, env);
       if ('report' in outcome) {
         reports.push(outcome.report);
+        onProgress?.(plugin.slug, 'done');
+        if (outcome.diagnostic) {
+          log.push(`[${plugin.slug}]`);
+        }
       } else {
         const { code, reason, action } = outcome.problem;
         noData.push({ plugin: plugin.slug, code, reason, action, logFile });
         log.push(`[${plugin.slug}] ${code}: ${reason}`);
-        if (outcome.diagnostic) {
-          log.push(outcome.diagnostic);
-        }
+        onProgress?.(plugin.slug, outcome.status);
+      }
+      if (outcome.diagnostic) {
+        log.push(outcome.diagnostic);
       }
     }
   } finally {

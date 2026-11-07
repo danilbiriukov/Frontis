@@ -8,6 +8,7 @@ import {
 import { JS_PACKAGES_PACKAGE, JS_PACKAGES_SLUG } from '../plugins/js-packages-contract.js';
 import { runGuardedPlugins, type GuardedPlugin } from './plugin-guard.js';
 import type { IEngineConfig } from './types/engine-config.js';
+import type { TPluginProgress } from './types/run.js';
 
 const testAdapter = new URL('../plugins/test-run.js', import.meta.url).href;
 type LcovHistory = { pending: true } | { rejected: Record<string, string> };
@@ -53,7 +54,7 @@ function combineJsPackagesReports(reports: PluginReport[]): PluginReport[] {
   return reports.flatMap((report) => report === first ? [combined] : report === second ? [] : [report]);
 }
 
-export async function runPlannedPlugins(plan: IEngineConfig) {
+export async function runPlannedPlugins(plan: IEngineConfig, onProgress?: TPluginProgress) {
   const { projectDir, modules } = plan.config;
   const preflight = plan.noData.filter(({ plugin }) => plugin !== 'project-info');
   const coverage = plan.plugins.find(({ slug }) => slug === 'coverage');
@@ -103,7 +104,7 @@ export async function runPlannedPlugins(plan: IEngineConfig) {
     ? [...plan.plugins, ...coverageTasks]
     : plan.plugins.flatMap((plugin) => plugin === coverage ? coverageTasks : [plugin]);
   try {
-    const { reports, noData } = await runGuardedPlugins(projectDir, plugins, preflight);
+    const { reports, noData } = await runGuardedPlugins(projectDir, plugins, preflight, onProgress);
     return { reports: combineJsPackagesReports(reports), noData };
   } finally {
     if (stateFile !== undefined) {
