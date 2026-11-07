@@ -7,6 +7,7 @@ export const MODULE_NAMES = [
   'audit',
   'knip',
   'lint',
+  'prettier',
   'coverage',
   'node-version',
   'build-size',
@@ -26,11 +27,11 @@ export interface FrontisConfig {
   configVersion?: 1;
   /** Корень проверяемого проекта. По умолчанию ".". */
   projectDir?: string;
-  /** Папка сборки. По умолчанию "dist". */
+  /** Папка сборки. По умолчанию "dist" в корне проекта. */
   buildDir?: string;
-  /** Путь к создаваемому отчёту. По умолчанию "frontis-report.html". */
+  /** Путь к отчёту. По умолчанию ".frontis/report.html" в корне проекта. */
   outFile?: string;
-  /** Открывать отчёт в браузере после работы. По умолчанию true. */
+  /** Открывать отчёт в браузере после работы. По умолчанию false. */
   open?: boolean;
   /** Ограничение времени на один модуль, мс, от 1000 до 600000. По умолчанию 120000. */
   timeoutMs?: number;
@@ -99,6 +100,7 @@ const MODULE_KEYS = ['enabled', 'timeoutMs'];
 
 const TIMEOUT_MIN = 1000;
 const TIMEOUT_MAX = 600_000;
+export const FRONTIS_OUTPUT_DIR = '.frontis';
 
 type Fields = Record<string, unknown>;
 
@@ -270,6 +272,7 @@ function checkModules(fields: Fields, timeoutMs: number, checker: Checker): Reso
     audit: resolveModule('audit'),
     knip: resolveModule('knip'),
     lint: resolveModule('lint'),
+    prettier: resolveModule('prettier'),
     coverage: resolveModule('coverage'),
     'node-version': resolveModule('node-version'),
     'build-size': resolveModule('build-size'),
@@ -278,8 +281,8 @@ function checkModules(fields: Fields, timeoutMs: number, checker: Checker): Reso
 
 /**
  * Проверяет загруженный конфиг и подставляет значения по умолчанию.
- * Относительные пути считаются от папки файла конфигурации
- * (без configPath — от текущей папки).
+ * Явные относительные пути считаются от папки файла конфигурации
+ * (без configPath от текущей папки).
  */
 export function resolveConfig(raw: unknown, configPath?: string): ResolvedConfig {
   const source = configPath === undefined ? 'Конфигурация' : basename(configPath);
@@ -297,12 +300,15 @@ export function resolveConfig(raw: unknown, configPath?: string): ResolvedConfig
   checkVersion(raw['configVersion'], checker);
 
   const timeoutMs = checker.timeout(raw, 'timeoutMs', 'timeoutMs', 120_000);
+  const projectDir = resolve(configDir, checker.string(raw, 'projectDir', 'projectDir', '.'));
+  const buildDir = checker.string(raw, 'buildDir', 'buildDir', undefined);
+  const outFile = checker.string(raw, 'outFile', 'outFile', undefined);
   const config: ResolvedConfig = {
     configVersion: 1,
-    projectDir: resolve(configDir, checker.string(raw, 'projectDir', 'projectDir', '.')),
-    buildDir: resolve(configDir, checker.string(raw, 'buildDir', 'buildDir', 'dist')),
-    outFile: resolve(configDir, checker.string(raw, 'outFile', 'outFile', 'frontis-report.html')),
-    open: checker.boolean(raw, 'open', 'open', true),
+    projectDir,
+    buildDir: buildDir === undefined ? resolve(projectDir, 'dist') : resolve(configDir, buildDir),
+    outFile: outFile === undefined ? resolve(projectDir, FRONTIS_OUTPUT_DIR, 'report.html') : resolve(configDir, outFile),
+    open: checker.boolean(raw, 'open', 'open', false),
     timeoutMs,
     testCommand: checker.string(raw, 'testCommand', 'testCommand', undefined),
     thresholds: checkThresholds(checker.section(raw, 'thresholds'), checker),

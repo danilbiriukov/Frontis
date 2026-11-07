@@ -15,8 +15,8 @@ test('пустой объект — все значения по умолчан�
     configVersion: 1,
     projectDir: configDir,
     buildDir: join(configDir, 'dist'),
-    outFile: join(configDir, 'frontis-report.html'),
-    open: true,
+    outFile: join(configDir, '.frontis', 'report.html'),
+    open: false,
     timeoutMs: 120000,
     testCommand: undefined,
     thresholds: { coverage: { warn: 65, target: 90 }, buildSize: { maxMb: 5 } },
@@ -25,8 +25,8 @@ test('пустой объект — все значения по умолчан�
 });
 
 test('частичный конфиг — заданные поля из него, остальные по умолчанию', () => {
-  const config = check({ configVersion: 1, open: false, timeoutMs: 5000, thresholds: { coverage: { target: 75 } } });
-  assert.equal(config.open, false);
+  const config = check({ configVersion: 1, open: true, timeoutMs: 5000, thresholds: { coverage: { target: 75 } } });
+  assert.equal(config.open, true);
   assert.equal(config.timeoutMs, 5000);
   assert.deepEqual(config.thresholds, { coverage: { warn: 65, target: 75 }, buildSize: { maxMb: 5 } });
   assert.equal(config.buildDir, join(configDir, 'dist'));
@@ -182,6 +182,12 @@ test('относительные пути становятся абсолютн�
   assert.equal(config.projectDir, join(configDir, 'app'));
   assert.equal(config.buildDir, resolve(configDir, '..', 'build'));
   assert.equal(config.outFile, join(configDir, 'reports', 'out.html'));
+});
+
+test('пути по умолчанию считаются от указанного projectDir', () => {
+  const config = check({ projectDir: 'app' });
+  assert.equal(config.buildDir, join(configDir, 'app', 'dist'));
+  assert.equal(config.outFile, join(configDir, 'app', '.frontis', 'report.html'));
 });
 
 test('абсолютный путь остаётся как есть', () => {

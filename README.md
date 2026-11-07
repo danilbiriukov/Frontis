@@ -28,7 +28,7 @@
 
 ## Структура
 
-- `src/core` ядро: запуск, чтение конфига
+- `src/core` ядро, запуск и [подготовка конфигурации движка](docs/engine-config.md)
 - `src/collectors` [контракт модулей сбора данных](docs/collector-contract.md)
 - `src/report` сборка HTML-отчёта
 
