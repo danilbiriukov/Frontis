@@ -9,6 +9,7 @@ import { runPlannedPlugins } from './run-plan.js';
 import type { TEngineAdapters } from './types/engine-config.js';
 
 const adapters = {
+  outdated: new URL('../plugins/js-packages.js', import.meta.url).href,
   knip: new URL('../plugins/knip.js', import.meta.url).href,
   lint: new URL('../plugins/eslint.js', import.meta.url).href,
   prettier: new URL('../plugins/prettier.js', import.meta.url).href,

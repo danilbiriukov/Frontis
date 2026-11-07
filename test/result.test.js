@@ -54,6 +54,42 @@ function plugin(slug, audits) {
   };
 }
 
+function withOutdatedEvidence(prod, dev, audits = []) {
+  return reportSchema.parse({
+    ...report,
+    plugins: [
+      ...report.plugins,
+      plugin('js-packages', [
+        ...audits,
+        {
+          slug: 'frontis-outdated-evidence', value: 1,
+          details: { table: { rows: [{ group: 'prod', ...prod }, { group: 'dev', ...dev }] } },
+        },
+      ]),
+    ],
+  });
+}
+
+function outdatedAudit(group, releases) {
+  const target = {
+    major: '2.0.0',
+    premajor: '2.0.0-rc.1',
+    preminor: '1.1.0-rc.1',
+    prepatch: '1.0.1-rc.1',
+    prerelease: '1.0.1-rc.2',
+  };
+  return {
+    slug: `npm-outdated-${group}`,
+    value: releases.length,
+    details: {
+      issues: releases.map((level, index) => ({
+        message: `Package \`package-${index}\` requires a **${level}** update from **${level === 'prerelease' ? '1.0.1-rc.1' : '1.0.0'}** to **${target[level]}**.`,
+        severity: 'info',
+      })),
+    },
+  };
+}
+
 test('частичный Report с категориями и commit: null даёт зафиксированный result.json', () => {
   const result = createResult(report, context());
   assert.deepEqual(result, expected);
@@ -226,6 +262,108 @@ test('ESLint и npm outdated с неподтверждёнными нулями 
   assert.equal(indicator(result, 'codeQuality').status, 'no-data');
   assert.equal(check(result, 'lint').code, 'eslint-coverage-unconfirmed');
   assert.deepEqual(check(result, 'lint').facts, {});
+});
+
+test('доля устаревших пакетов считается отдельно, prerelease учитывается в важности', () => {
+  const withEvidence = withOutdatedEvidence(
+    { state: 'verified', comparable: 5 },
+    { state: 'verified', comparable: 4 },
+    [outdatedAudit('prod', ['premajor', 'prepatch']), outdatedAudit('dev', ['preminor', 'prerelease'])],
+  );
+  const result = createResult(withEvidence, context());
+  const outdated = check(result, 'outdated');
+  assert.deepEqual(outdated.facts, {
+    production: 2, development: 2,
+    productionComparable: 5, developmentComparable: 4,
+    productionState: 'verified', developmentState: 'verified',
+    productionOutdatedPercent: 40, developmentOutdatedPercent: 50,
+    major: 1, minor: 1, patch: 2,
+  });
+  assert.equal(indicator(result, 'outdated').status, 'fix');
+  assert(outdated.audits.includes('js-packages/frontis-outdated-evidence'));
+  assert.equal(outdated.details.issues[0].level, 'premajor');
+  assert.equal(outdated.details.issues[0].targetVersion, '2.0.0-rc.1');
+});
+
+test('чистый результат подтверждённой группы засчитывается при второй пустой группе', () => {
+  const withEvidence = withOutdatedEvidence(
+    { state: 'verified', comparable: 3 },
+    { state: 'empty', comparable: 0 },
+    [outdatedAudit('prod', [])],
+  );
+  const result = createResult(withEvidence, context());
+  const outdated = check(result, 'outdated');
+  assert.equal(outdated.status, 'ok');
+  assert.equal(outdated.facts.production, 0);
+  assert.equal(outdated.facts.productionOutdatedPercent, 0);
+  assert.equal(outdated.facts.developmentComparable, 0);
+  assert.equal(outdated.facts.development, undefined);
+  assert.equal(outdated.facts.developmentOutdatedPercent, undefined);
+  assert.equal(indicator(result, 'outdated').incomplete, undefined);
+  assert.equal(result.score.known, 4);
+});
+
+test('пригодный результат и неподтверждённая группа дают неполный показатель с причиной', () => {
+  const withEvidence = withOutdatedEvidence(
+    { state: 'verified', comparable: 4 },
+    { state: 'unconfirmed', comparable: 3 },
+    [outdatedAudit('prod', [])],
+  );
+  const result = createResult(withEvidence, context());
+  const outdated = check(result, 'outdated');
+  assert.equal(outdated.status, 'ok');
+  assert.equal(outdated.incomplete, true);
+  assert.equal(outdated.code, 'registry-unconfirmed');
+  assert.equal(outdated.facts.productionOutdatedPercent, 0);
+  assert.equal(outdated.facts.developmentState, 'unconfirmed');
+  assert.equal(outdated.facts.developmentOutdatedPercent, undefined);
+  assert.equal(indicator(result, 'outdated').incomplete, true);
+  assert.equal(result.score.known, 4);
+});
+
+test('находка неподтверждённой группы видна без доли и успешного результата проверки', () => {
+  const withEvidence = withOutdatedEvidence(
+    { state: 'unconfirmed', comparable: 4 },
+    { state: 'empty', comparable: 0 },
+    [outdatedAudit('prod', ['major'])],
+  );
+  const result = createResult(withEvidence, context());
+  const outdated = check(result, 'outdated');
+  assert.equal(outdated.status, 'no-data');
+  assert.equal(outdated.code, 'registry-unconfirmed');
+  assert.equal(outdated.facts.production, 1);
+  assert.equal(outdated.facts.major, 1);
+  assert.equal(outdated.facts.productionOutdatedPercent, undefined);
+  assert.equal(indicator(result, 'outdated').status, 'fix');
+  assert.equal(indicator(result, 'outdated').incomplete, true);
+});
+
+test('обе группы без сопоставимых зависимостей дают отдельную причину пропуска', () => {
+  const withEvidence = withOutdatedEvidence(
+    { state: 'empty', comparable: 0 },
+    { state: 'empty', comparable: 0 },
+  );
+  const result = createResult(withEvidence, context());
+  assert.equal(indicator(result, 'outdated').status, 'no-data');
+  assert.equal(check(result, 'outdated').code, 'no-comparable-dependencies');
+  assert.equal(check(result, 'outdated').facts.productionOutdatedPercent, undefined);
+  assert.equal(check(result, 'outdated').facts.developmentOutdatedPercent, undefined);
+  assert.equal(result.score.known, 3);
+});
+
+test('неизвестный знаменатель не превращает ноль аудита в подтверждённый результат', () => {
+  const withEvidence = withOutdatedEvidence(
+    { state: 'verified' },
+    { state: 'empty', comparable: 0 },
+    [outdatedAudit('prod', [])],
+  );
+  const result = createResult(withEvidence, context());
+  const outdated = check(result, 'outdated');
+  assert.equal(outdated.status, 'no-data');
+  assert.equal(outdated.code, 'invalid-audit-value');
+  assert.equal(outdated.facts.productionComparable, undefined);
+  assert.equal(outdated.facts.production, undefined);
+  assert.equal(outdated.facts.productionOutdatedPercent, undefined);
 });
 
 test('Prettier, версия Node.js и размер сборки передают факты, находки и детали', () => {

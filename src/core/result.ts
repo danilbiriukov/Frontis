@@ -2,6 +2,7 @@ import type { AuditReport, Report } from '@code-pushup/models';
 import semver from 'semver';
 import { LCOV_DATE_AUDIT } from '../plugins/coverage-contract.js';
 import { ESLINT_CHECKED_FILES, ESLINT_PARSE_ERRORS } from '../plugins/eslint-evidence.js';
+import { OUTDATED_EVIDENCE_AUDIT } from '../plugins/js-packages-contract.js';
 import type { ModuleName, Thresholds } from './config.js';
 import type { Finding } from './importance.js';
 import type { PluginProblem } from './plugin-guard.js';
@@ -57,6 +58,16 @@ const invalidAudit: PluginProblem = {
   code: 'invalid-audit-value',
   reason: 'Аудит Code PushUp содержит непригодные для оценки данные.',
   action: 'Проверьте версию и настройки плагина Code PushUp.',
+};
+const registryUnconfirmed: PluginProblem = {
+  code: 'registry-unconfirmed',
+  reason: 'Отчёт не подтверждает получение метаданных для всех групп зависимостей.',
+  action: 'Проверьте доступ к npm-реестру и результат npm outdated.',
+};
+const noComparableDependencies: PluginProblem = {
+  code: 'no-comparable-dependencies',
+  reason: 'Нет установленных зависимостей с сопоставимыми версиями.',
+  action: 'Проверьте зависимости в package.json и установите их перед проверкой.',
 };
 
 const npmAuditSlugs = ['npm-audit-prod', 'npm-audit-dev'];
@@ -143,31 +154,91 @@ function npmAudit(report: Report): ICheckEvidence {
   };
 }
 
+function outdatedGroup(
+  audits: AuditReport[],
+  evidence: AuditReport,
+  items: IResultIssue[],
+  group: 'prod' | 'dev',
+) {
+  const rows = (evidence.details?.table?.rows ?? []).filter((row) => !Array.isArray(row) && row.group === group);
+  const row = rows.length === 1 && !Array.isArray(rows[0]) ? rows[0] : undefined;
+  const comparable = isCount(row?.comparable) ? row.comparable : undefined;
+  const state = row?.state;
+  const knownState = state === 'verified' || state === 'empty' || state === 'unconfirmed';
+  const audit = findAudit(audits, `npm-outdated-${group}`);
+  const value = isCount(audit?.value) ? audit.value : undefined;
+  const issuesCount = items.filter((item) => item.group === group && item.level !== undefined).length;
+  const validAudit = value !== undefined && value === issuesCount;
+  const verified = state === 'verified' && comparable !== undefined && comparable > 0 && validAudit && value <= comparable;
+  const invalid = comparable === undefined || !knownState ||
+    (state === 'verified' && !verified) ||
+    (state === 'empty' && (comparable !== 0 || (value ?? 0) > 0)) ||
+    (audit !== undefined && !validAudit);
+  return {
+    comparable,
+    state: knownState ? state : undefined,
+    value: value === 0 && !verified ? undefined : value,
+    percent: verified ? value / comparable * 100 : undefined,
+    verified,
+    invalid,
+  };
+}
+
 function npmOutdated(report: Report): ICheckEvidence {
   const plugin = 'js-packages';
   const audits = selectAudits(report, plugin, outdatedSlugs);
+  const evidence = selectAudits(report, plugin, [OUTDATED_EVIDENCE_AUDIT])[0];
   const totals = { major: 0, minor: 0, patch: 0 };
   const items = dependencyIssues(audits).map((issue) => {
-    const match = /^Package (?:\[)?`([^`]+)`(?:\]\(.*?\))? requires a \*\*(major|minor|patch)\*\* update from \*\*(.+?)\*\* to \*\*(.+?)\*\*\./.exec(issue.message);
+    const match = /^Package (?:\[)?`([^`]+)`(?:\]\(.*?\))? requires a \*\*(major|minor|patch|premajor|preminor|prepatch|prerelease)\*\* update from \*\*(.+?)\*\* to \*\*(.+?)\*\*\./.exec(issue.message);
     if (match === null) {
       return issue;
     }
-    const level = match[2] as keyof typeof totals;
-    totals[level] += 1;
+    const level = match[2];
+    const bucket = level === 'prerelease' ? 'patch' : level.replace(/^pre/, '') as keyof typeof totals;
+    totals[bucket] += 1;
     return { ...issue, package: match[1], level, currentVersion: match[3], targetVersion: match[4] };
   });
-  const [production, development] = outdatedSlugs.map((slug) => count(audits, slug));
   const recognized = totals.major + totals.minor + totals.patch;
+  const findings = outdatedFindings(totals);
+  if (evidence !== undefined) {
+    const production = outdatedGroup(audits, evidence, items, 'prod');
+    const development = outdatedGroup(audits, evidence, items, 'dev');
+    const hasVerifiedGroup = production.verified || development.verified;
+    let problem: PluginProblem | undefined;
+    if (production.invalid || development.invalid) {
+      problem = invalidAudit;
+    } else if (production.state === 'unconfirmed' || development.state === 'unconfirmed') {
+      problem = registryUnconfirmed;
+    } else if (!hasVerifiedGroup) {
+      problem = noComparableDependencies;
+    }
+    return {
+      plugin,
+      audits: [...audits, evidence],
+      facts: {
+        production: production.value,
+        development: development.value,
+        productionComparable: production.comparable,
+        developmentComparable: development.comparable,
+        productionState: production.state,
+        developmentState: development.state,
+        productionOutdatedPercent: production.percent,
+        developmentOutdatedPercent: development.percent,
+        ...(recognized > 0 || hasVerifiedGroup ? totals : {}),
+      },
+      findings,
+      details: { issues: items },
+      ...(hasVerifiedGroup ? { partial: problem } : { problem }),
+    };
+  }
+  const [production, development] = outdatedSlugs.map((slug) => count(audits, slug));
   const mismatchedCount = audits.some(({ slug, value }) =>
     value !== items.filter(({ audit, level }) => audit === `${plugin}/${slug}` && level !== undefined).length);
   const unconfirmed = production === 0 || development === 0;
   const problem = auditProblem(audits, outdatedSlugs, [production, development]) ??
     (mismatchedCount ? invalidAudit : undefined) ??
-    (unconfirmed ? {
-      code: 'registry-unconfirmed',
-      reason: 'Отчёт не подтверждает получение метаданных для группы без устаревших пакетов.',
-      action: 'Проверьте доступ к npm-реестру и результат npm outdated.',
-    } : undefined);
+    (unconfirmed ? registryUnconfirmed : undefined);
   return {
     plugin,
     audits,
@@ -176,7 +247,7 @@ function npmOutdated(report: Report): ICheckEvidence {
       development: development === 0 ? undefined : development,
       ...(recognized === 0 ? {} : totals),
     },
-    findings: outdatedFindings(totals),
+    findings,
     details: { issues: items },
     problem,
   };
@@ -399,6 +470,7 @@ function createCheck(id: TCheckId, evidence: ICheckEvidence, context: IResultCon
   const diagnostic = context.noData.find(({ plugin }) => plugin === id) ??
     context.noData.find(({ plugin }) => plugin === evidence.plugin);
   const problem = diagnostic ?? evidence.problem;
+  const partial = problem === undefined ? evidence.partial : undefined;
   const check: IResultCheck = {
     id,
     status: problem === undefined ? resolveStatus(evidence.findings) : 'no-data',
@@ -406,9 +478,11 @@ function createCheck(id: TCheckId, evidence: ICheckEvidence, context: IResultCon
     facts: Object.fromEntries(
       Object.entries(evidence.facts).filter((entry): entry is [string, TResultFact] => entry[1] !== undefined),
     ),
+    ...(partial === undefined ? {} : { incomplete: true }),
   };
-  if (problem !== undefined) {
-    Object.assign(check, { code: problem.code, reason: problem.reason, action: problem.action });
+  const explanation = problem ?? partial;
+  if (explanation !== undefined) {
+    Object.assign(check, { code: explanation.code, reason: explanation.reason, action: explanation.action });
   }
   if (diagnostic?.logFile !== undefined) {
     check.logFile = diagnostic.logFile;
@@ -434,7 +508,8 @@ export function createResult(report: Report, context: IResultContext): FrontisRe
     const checks = results.map(({ check }) => check);
     const confirmed = results.flatMap((result) => result.findings);
     findings.push(...confirmed);
-    const gap = checks.find(({ status }) => status === 'no-data') ?? checks.find(({ status }) => status === 'disabled');
+    const gap = checks.find(({ status, incomplete }) => status === 'no-data' || incomplete) ??
+      checks.find(({ status }) => status === 'disabled');
     const known = confirmed.length > 0 || checks.some(({ status }) => status !== 'no-data' && status !== 'disabled');
     indicators.push({
       id,

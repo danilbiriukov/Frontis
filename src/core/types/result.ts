@@ -31,6 +31,7 @@ export interface IResultCheck extends Partial<PluginProblem> {
   facts: Record<string, TResultFact>;
   details?: IResultDetails;
   logFile?: string;
+  incomplete?: true;
 }
 
 export interface IResultFinding {
@@ -88,4 +89,5 @@ export interface ICheckEvidence {
   findings: Finding[];
   details?: IResultDetails;
   problem?: PluginProblem;
+  partial?: PluginProblem;
 }
