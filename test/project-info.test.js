@@ -88,6 +88,7 @@ test('из Git читаются ветка и последний коммит', 
   assert.equal(data.git.branch, 'feature/demo');
   assert.equal(data.git.commit.hash, hash);
   assert.equal(data.git.commit.message, 'Первый коммит');
+  assert.equal(data.git.commit.author, 'Frontis');
   assert.ok(!Number.isNaN(Date.parse(data.git.commit.date)));
 
   git(projectDir, 'checkout', '--detach', '--quiet');

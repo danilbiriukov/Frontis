@@ -1,0 +1,32 @@
+# Результаты запуска Frontis
+
+При наличии хотя бы одного валидного аудита `frontis run` записывает в `.frontis/` два файла.
+
+- `report.json` содержит факты Code PushUp и проходит проверку по схеме `Report` из `@code-pushup/models`. Группы и категории ссылаются на сохранившиеся аудиты и группы. Вне Git и в репозитории без коммитов поле `commit` равно `null`.
+- `result.json` содержит оценку Frontis. Поля `runAt` и `durationMs` относятся к тому же запуску. `schemaVersion` задаёт версию формата, `tool` и `report` содержат версии Frontis и Code PushUp, `project` содержит имя, версию, ветку и SHA коммита при наличии.
+
+При новом запуске Frontis очищает предыдущую пару файлов. Если валидных аудитов нет, остаётся `no-data.json` с причинами и команда возвращает код 2. Служебный `run.lock` содержит PID процесса и не даёт двум запускам одновременно записывать в один каталог. После аварийного завершения удалите этот файл, когда убедитесь, что процесс проверки завершён.
+
+## Оценка
+
+`indicators` содержит статусы показателей, ссылки `плагин/аудит`, находки и состояния отдельных проверок в `checks`. Если одна из проверок не дала данных, показатель отмечается как неполный. Подтверждённые находки влияют на статус и рекомендации. Для недоступной проверки сохраняются `code`, `reason` и `action`. В `now` и `target` записываются значения, отформатированные правилами Frontis.
+
+`score` рассчитывается по статусам показателей. Если пригодных данных меньше чем по трём показателям, `value` и `zone` равны `null`. Метаданные проекта и отключённые желательные показатели в `total` не входят. Рекомендации перечисляются от высокой важности к низкой.
+
+## Источники показателей
+
+В `checks[].facts` остаются числа и версии, прочитанные из аудитов. `checks[].details.issues` содержит до десяти находок с исходным сообщением, важностью инструмента, ссылкой на аудит и местом в файле, если оно известно.
+
+| Показатель | Аудиты Code PushUp | Используемые данные |
+| --- | --- | --- |
+| `outdated` | `js-packages/npm-outdated-prod`, `js-packages/npm-outdated-dev` | Число пакетов из `value`, тип обновления и версии из `details.issues[].message` |
+| `audit` | `js-packages/npm-audit-prod`, `js-packages/npm-audit-dev` | Число уязвимостей из `value`, уровень из сообщения, при его отсутствии используется `severity` |
+| `unusedCode` | `frontis-knip` с аудитами `unused-files`, `unused-dependencies`, `unused-exports`, `unused-types`, `other-findings` | Числа из `value` и детали находок |
+| `codeQuality` | Аудиты правил `eslint/*` и `frontis-prettier/checked-files`, `frontis-prettier/unformatted-files`, `frontis-prettier/parse-errors` | Ошибки и предупреждения из `details.issues[].severity` ESLint, счётчики файлов из `value` Prettier |
+| `coverage` | `coverage/line-coverage`, `coverage/branch-coverage`, `coverage/function-coverage` | Проценты из `value`. Статус покрытия определяется по строкам. Итоги Jest и Vitest относятся к отдельной проверке `tests` |
+| `nodeVersion` | `frontis-node-version/project-version`, `frontis-node-version/latest-lts`, `frontis-node-version/version-lag` | Версии из `displayValue`, тип отставания из `value` |
+| `buildSize` | `frontis-build-size/size-bytes`, `frontis-build-size/file-count`, `frontis-build-size/limit-bytes` | Размер, число файлов и предел из `value`, крупнейшие файлы из `details.table.rows` |
+
+В Code PushUp 0.126.4 нулевой результат ESLint сам по себе не подтверждает проверку файлов, а ноль устаревших пакетов не подтверждает получение метаданных из реестра. В этих случаях Frontis сохраняет причины `eslint-coverage-unconfirmed` и `registry-unconfirmed`. Официальные плагины подключаются в задачах [#22](https://github.com/danilbiriukov/Frontis/issues/22), [#23](https://github.com/danilbiriukov/Frontis/issues/23), [#25](https://github.com/danilbiriukov/Frontis/issues/25) и [#26](https://github.com/danilbiriukov/Frontis/issues/26).
+
+Парная фикстура показывает частичный запуск с рабочими аудитами knip, ESLint и покрытия, а также пропуском Prettier. [Входной report.json](../test/fixtures/result/report.json) · [Ожидаемый result.json](../test/fixtures/result/result.json)

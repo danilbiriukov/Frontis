@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "frontis",
+    "version": "0.1.0"
+  },
+  "report": {
+    "file": "report.json",
+    "codePushUpVersion": "0.126.4"
+  },
+  "project": {
+    "name": "shop-web",
+    "version": "4.12.0",
+    "branch": null,
+    "commit": null
+  },
+  "runAt": "2026-10-10T14:32:00.000Z",
+  "durationMs": 217000,
+  "score": {
+    "value": 60,
+    "known": 3,
+    "total": 5,
+    "zone": "yellow"
+  },
+  "indicators": [
+    {
+      "id": "outdated",
+      "status": "no-data",
+      "audits": [],
+      "findings": [],
+      "checks": [
+        {
+          "id": "outdated",
+          "status": "no-data",
+          "audits": [],
+          "facts": {},
+          "code": "missing-audit",
+          "reason": "В отчёте Code PushUp не хватает аудитов для проверки.",
+          "action": "Проверьте настройки инструмента и повторите запуск."
+        }
+      ],
+      "code": "missing-audit",
+      "reason": "В отчёте Code PushUp не хватает аудитов для проверки.",
+      "action": "Проверьте настройки инструмента и повторите запуск."
+    },
+    {
+      "id": "audit",
+      "status": "no-data",
+      "audits": [],
+      "findings": [],
+      "checks": [
+        {
+          "id": "audit",
+          "status": "no-data",
+          "audits": [],
+          "facts": {},
+          "code": "missing-audit",
+          "reason": "В отчёте Code PushUp не хватает аудитов для проверки.",
+          "action": "Проверьте настройки инструмента и повторите запуск."
+        }
+      ],
+      "code": "missing-audit",
+      "reason": "В отчёте Code PushUp не хватает аудитов для проверки.",
+      "action": "Проверьте настройки инструмента и повторите запуск."
+    },
+    {
+      "id": "unusedCode",
+      "status": "ok",
+      "audits": [
+        "frontis-knip/unused-files",
+        "frontis-knip/unused-dependencies",
+        "frontis-knip/unused-exports",
+        "frontis-knip/unused-types",
+        "frontis-knip/other-findings"
+      ],
+      "findings": [],
+      "checks": [
+        {
+          "id": "knip",
+          "status": "ok",
+          "audits": [
+            "frontis-knip/unused-files",
+            "frontis-knip/unused-dependencies",
+            "frontis-knip/unused-exports",
+            "frontis-knip/unused-types",
+            "frontis-knip/other-findings"
+          ],
+          "facts": {
+            "files": 0,
+            "dependencies": 0,
+            "exports": 0,
+            "types": 0,
+            "otherFindings": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "codeQuality",
+      "status": "fix",
+      "audits": [
+        "eslint/no-unused-vars"
+      ],
+      "findings": [
+        {
+          "importance": "high",
+          "kind": "lint.errors",
+          "now": "1",
+          "target": "0"
+        }
+      ],
+      "checks": [
+        {
+          "id": "lint",
+          "status": "fix",
+          "audits": [
+            "eslint/no-unused-vars"
+          ],
+          "facts": {
+            "errors": 1,
+            "warnings": 0
+          },
+          "details": {
+            "issues": [
+              {
+                "message": "'unused' is assigned a value but never used.",
+                "severity": "error",
+                "source": {
+                  "file": "src/demo.js",
+                  "position": {
+                    "startLine": 2,
+                    "startColumn": 9
+                  }
+                },
+                "audit": "eslint/no-unused-vars"
+              }
+            ]
+          }
+        },
+        {
+          "id": "prettier",
+          "status": "no-data",
+          "audits": [],
+          "facts": {},
+          "code": "no-prettier-config",
+          "reason": "В проекте нет настроек Prettier.",
+          "action": "Добавьте .prettierrc или поле prettier в package.json."
+        }
+      ],
+      "incomplete": true
+    },
+    {
+      "id": "coverage",
+      "status": "plan",
+      "audits": [
+        "coverage/line-coverage",
+        "coverage/branch-coverage"
+      ],
+      "findings": [
+        {
+          "importance": "mid",
+          "kind": "coverage.lines",
+          "now": "78,4%",
+          "target": "90%"
+        }
+      ],
+      "checks": [
+        {
+          "id": "coverage",
+          "status": "plan",
+          "audits": [
+            "coverage/line-coverage",
+            "coverage/branch-coverage"
+          ],
+          "facts": {
+            "lines": 78.4,
+            "branches": 50
+          }
+        },
+        {
+          "id": "tests",
+          "status": "no-data",
+          "audits": [],
+          "facts": {},
+          "code": "tests-report-unavailable",
+          "reason": "В отчёте нет итогов прогона тестов.",
+          "action": "Для итогов тестов требуется отдельная проверка Jest или Vitest."
+        }
+      ],
+      "incomplete": true
+    }
+  ],
+  "recommendations": [
+    {
+      "importance": "high",
+      "indicator": "codeQuality",
+      "now": "1",
+      "target": "0",
+      "text": "Исправьте ошибки линтера."
+    },
+    {
+      "importance": "mid",
+      "indicator": "coverage",
+      "now": "78,4%",
+      "target": "90%",
+      "text": "Доведите покрытие строк до цели тестами на непокрытые участки."
+    }
+  ]
+}

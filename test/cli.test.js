@@ -4,6 +4,7 @@ import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { reportSchema } from '@code-pushup/models';
 
 const cli = join(import.meta.dirname, '..', 'dist', 'cli.js');
 const { version } = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8'));
@@ -66,18 +67,28 @@ test('run без конфига — понятное сообщение без �
 test('run без доступных аудитов возвращает 2 и сохраняет причины', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const outputDir = join(dir, '.frontis');
+  mkdirSync(outputDir);
+  writeFileSync(join(outputDir, 'report.json'), '{"previous":true}');
+  writeFileSync(join(outputDir, 'result.json'), '{"previous":true}');
   writeFileSync(join(dir, 'frontis.config.mjs'), 'export default {};');
   const { status, stdout } = frontis(['run'], dir);
   assert.equal(status, 2);
   assert.match(stdout, /frontis\.config\.mjs/);
   assert.match(stdout, /Аудиты Frontis: 0/);
-  const noData = JSON.parse(readFileSync(join(dir, '.frontis', 'no-data.json'), 'utf8'));
+  const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
+    outdated: 'no-package-json',
+    audit: 'no-package-json',
+    lint: 'no-eslint-config',
+    coverage: 'no-lcov',
     knip: 'knip-not-installed',
     prettier: 'prettier-not-installed',
     'node-version': 'no-node-version',
     'build-size': 'no-build-dir',
   });
+  assert.equal(existsSync(join(outputDir, 'report.json')), false);
+  assert.equal(existsSync(join(outputDir, 'result.json')), false);
 });
 
 test('run собирает аудиты сборки вне Git и продолжает после пропусков', (t) => {
@@ -88,13 +99,28 @@ test('run собирает аудиты сборки вне Git и продол�
   writeFileSync(join(dir, 'dist', 'index.js'), 'export {};');
   const { status, stdout, stderr } = frontis(['run'], dir);
   assert.equal(status, 0, stderr);
-  assert.match(stdout, /Аудиты Frontis: 3\. Модули без данных: 3/);
-  const noData = JSON.parse(readFileSync(join(dir, '.frontis', 'no-data.json'), 'utf8'));
+  assert.match(stdout, /Аудиты Frontis: 3\. Модули без данных: 7/);
+  const outputDir = join(dir, '.frontis');
+  const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
+    outdated: 'no-package-json',
+    audit: 'no-package-json',
+    lint: 'no-eslint-config',
+    coverage: 'no-lcov',
     'node-version': 'disabled',
     knip: 'knip-not-installed',
     prettier: 'prettier-not-installed',
   });
+  const report = reportSchema.parse(JSON.parse(readFileSync(join(outputDir, 'report.json'), 'utf8')));
+  const result = JSON.parse(readFileSync(join(outputDir, 'result.json'), 'utf8'));
+  assert.equal(report.commit, null);
+  assert.deepEqual(report.plugins.map(({ slug }) => slug), ['frontis-build-size']);
+  assert.equal(result.runAt, report.date);
+  assert.equal(result.report.file, 'report.json');
+  assert.equal(result.tool.version, version);
+  assert.equal(result.project.commit, null);
+  assert.equal(result.score.known, 1);
+  assert.equal(result.indicators.find(({ id }) => id === 'buildSize').status, 'ok');
   assert.equal(existsSync(join(dir, '.git')), false);
 });
 

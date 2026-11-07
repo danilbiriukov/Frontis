@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
 import { run } from './core/index.js';
+import { frontisVersion } from './core/package-info.js';
 
 const HELP = `frontis: аудит фронтенд-проекта в один HTML-отчёт
 
@@ -8,11 +8,6 @@ const HELP = `frontis: аудит фронтенд-проекта в один HT
   frontis run          запустить проверки в текущей папке
   frontis --help       показать эту справку
   frontis --version    показать версию`;
-
-function readVersion(): string {
-  const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
-  return (JSON.parse(raw) as { version: string }).version;
-}
 
 const isHelp = (arg: string | undefined): boolean => arg === '-h' || arg === '--help';
 
@@ -29,7 +24,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (command === '-v' || command === '--version') {
-    console.log(readVersion());
+    console.log(frontisVersion());
     return 0;
   }
   if (command === 'run') {
