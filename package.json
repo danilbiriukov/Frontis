@@ -7,9 +7,10 @@
     "clean": "node -e \"import('node:fs').then(f => f.rmSync('dist', { recursive: true, force: true }))\"",
     "build": "npm run clean && tsc && node -e \"import('node:fs').then(f => f.chmodSync('dist/cli.js', 0o755))\"",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "node scripts/pack-release.mjs",
     "lint": "oxlint --deny-warnings",
-    "test": "npm run build && node --test \"test/*.test.js\""
+    "test": "npm run build && node --test \"test/*.test.js\"",
+    "pack:release": "npm run build && node scripts/pack-release.mjs"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -64,5 +65,14 @@
     "npm-audit"
   ],
   "author": "Biriukov Danil <danilbiriukovv@gmail.com>",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "overrides": {
+    "@code-pushup/utils": {
+      "simple-git": "4.0.2",
+      "glob": "14.0.4"
+    },
+    "@code-pushup/eslint-plugin": {
+      "glob": "14.0.4"
+    }
+  }
 }
