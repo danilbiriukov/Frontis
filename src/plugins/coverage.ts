@@ -29,7 +29,8 @@ async function selectedReport(options: CoverageOptions): Promise<string | Plugin
     };
   }
   if ('problem' in state) {
-    throw new CollectorRunError({ status: 'no-data', ...state.problem, cause: state.diagnostic });
+    const status = state.problem.code === 'test-command-failed' ? 'error' : 'no-data';
+    throw new CollectorRunError({ status, ...state.problem, cause: state.diagnostic });
   }
   return state.report;
 }

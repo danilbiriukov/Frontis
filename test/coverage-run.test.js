@@ -108,6 +108,10 @@ test('после сбоя команды сохраняются упавшие �
   const dir = await project(t, { 'generate.cjs': reportWriter({ exit: 1 }) }, { testCommand: 'node generate.cjs' });
   const output = run(dir);
   assert.equal(output.status, 0, output.stderr);
+  assert.match(output.stdout, /^\[coverage\] ошибка$/m);
+  assert.match(output.stdout, /^\[tests\] готово$/m);
+  assert.match(output.stdout, /Успешные проверки: 1\. Ошибки: 1\./);
+  assert.doesNotMatch(output.stdout + output.stderr, /Контрольный журнал прогона/);
   const report = reportSchema.parse(await output.json('report.json'));
   assert.deepEqual(report.plugins.map(({ slug }) => slug), ['frontis-tests']);
   const noData = (await output.json('no-data.json')).find(({ plugin }) => plugin === 'coverage');
@@ -127,6 +131,7 @@ test('после сбоя команды сохраняются упавшие �
   await writeFile(join(dir, 'generate.cjs'), "console.log('Команда выполнилась без записи отчётов');");
   const retry = run(dir);
   assert.equal(retry.status, 2, retry.stderr);
+  assert.match(retry.stdout, /^\[coverage\] нет данных$/m);
   const retryCodes = Object.fromEntries((await retry.json('no-data.json')).map(({ plugin, code }) => [plugin, code]));
   assert.equal(retryCodes.coverage, 'no-fresh-lcov');
   await assert.rejects(retry.json('report.json'), { code: 'ENOENT' });

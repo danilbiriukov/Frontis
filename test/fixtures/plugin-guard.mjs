@@ -15,7 +15,7 @@ export function prepare({ mode, slug }, outputDir) {
     slug,
     title: 'Контрольный плагин',
     icon: mode === 'invalid' ? 'invalid-icon' : 'file',
-    audits: [{ slug: 'findings', title: 'Находки' }],
+    audits: [{ slug: 'findings', title: 'Находки', isSkipped: mode === 'skipped' }],
     runner: async () => {
       await writeFile(join(outputDir, 'scratch.txt'), 'Временные данные плагина');
       if (mode === 'crash') {
@@ -33,10 +33,13 @@ export function prepare({ mode, slug }, outputDir) {
       if (mode === 'hang') {
         const child = spawn(process.execPath, [
           '--input-type=commonjs', '-e',
-          "setTimeout(() => require('node:fs').writeFileSync('late.txt', 'late'), 2200)",
+          "setTimeout(() => require('node:fs').writeFileSync('late.txt', 'late'), 5700)",
         ], { stdio: 'ignore', windowsHide: true });
         console.log(`Запущен дочерний процесс: ${child.pid}`);
         await new Promise(() => {});
+      }
+      if (mode === 'logged-success') {
+        console.log('Технический вывод успешной проверки');
       }
       return [{ slug: 'findings', score: 1, value: 0 }];
     },
