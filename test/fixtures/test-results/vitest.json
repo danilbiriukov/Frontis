@@ -1,0 +1,92 @@
+{
+  "numTotalTestSuites": 3,
+  "numPassedTestSuites": 0,
+  "numFailedTestSuites": 3,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 4,
+  "numPassedTests": 1,
+  "numFailedTests": 1,
+  "numPendingTests": 1,
+  "numTodoTests": 1,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 0,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [],
+      "startTime": 0,
+      "endTime": 0,
+      "status": "failed",
+      "message": "suite crashed",
+      "name": "/project/src/broken.test.js"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "math"
+          ],
+          "fullName": "math adds",
+          "status": "passed",
+          "title": "adds",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "math"
+          ],
+          "fullName": "math fails",
+          "status": "failed",
+          "title": "fails",
+          "duration": 1,
+          "failureMessages": [
+            "AssertionError: expected 2 to be 3 // Object.is equality\n    at /project/src/math.test.js:4:39\n    at file:////project/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:////project/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:////project/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:////project/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:////project/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:////project/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:////project/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"
+          ],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "math"
+          ],
+          "fullName": "math skipped",
+          "status": "skipped",
+          "title": "skipped",
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "math"
+          ],
+          "fullName": "math todo",
+          "status": "todo",
+          "title": "todo",
+          "failureMessages": [],
+          "meta": {}
+        }
+      ],
+      "startTime": 0,
+      "endTime": 0,
+      "status": "failed",
+      "message": "",
+      "name": "/project/src/math.test.js"
+    }
+  ]
+}

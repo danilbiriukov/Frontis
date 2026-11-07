@@ -1,0 +1,9 @@
+{
+  "name": "knip-findings",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "dependencies": {
+    "left-pad": "1.3.0"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "knip-broken",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js"
+}

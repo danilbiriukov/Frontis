@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { createNodeVersionCollector } from '../dist/index.js';
 import { resolveConfig } from '../dist/core/config.js';
 import { IMPORTANCE_LABELS, STATUS_LABELS } from '../dist/core/labels.js';
 import { buildRecommendations } from '../dist/core/recommendations.js';
@@ -147,25 +150,39 @@ test('сборка чуть больше предела не округляет�
 
 // Node.js
 
-test('Node.js против LTS 24.21.3: 20.11.1 — высокая, 24.18.0 — средняя, 24.21.0 — низкая', () => {
-  assert.deepEqual(byMetric(nodeFindings('20.11.1', '24.21.3')), { 'node.major': 'high' });
-  assert.deepEqual(byMetric(nodeFindings('24.18.0', '24.21.3')), { 'node.minor': 'mid' });
-  assert.deepEqual(byMetric(nodeFindings('24.21.0', '24.21.3')), { 'node.patch': 'low' });
-  const [item] = nodeFindings('v20.11.1', 'v24.21.3');
+const lts = { version: '24.21.3', codename: 'Krypton' };
+const node = (version, lag) => nodeFindings({ version, latestLts: lts, lag });
+
+test('Node.js: отставание major — высокая, minor — средняя, patch — низкая', () => {
+  assert.deepEqual(byMetric(node('20.11.1', 'major')), { 'node.major': 'high' });
+  assert.deepEqual(byMetric(node('24.18.0', 'minor')), { 'node.minor': 'mid' });
+  assert.deepEqual(byMetric(node('24.21.0', 'patch')), { 'node.patch': 'low' });
+  const [item] = node('20.11.1', 'major');
   assert.equal(item.module, 'node-version');
   assert.equal(item.current, '20.11.1');
   assert.equal(item.target, '24.21.3');
 });
 
-test('Node.js: равная или более новая версия, неполная версия той же ветки — находки нет', () => {
-  assert.deepEqual(nodeFindings('24.21.3', '24.21.3'), []);
-  assert.deepEqual(nodeFindings('25.0.0', '24.21.3'), []);
-  assert.deepEqual(nodeFindings('24', '24.21.3'), []);
-  assert.deepEqual(byMetric(nodeFindings('22', '24.21.3')), { 'node.major': 'high' });
+test('Node.js: без отставания находки нет', () => {
+  assert.deepEqual(node('24.21.3', null), []);
 });
 
-test('Node.js: неразборчивая версия — ошибка', () => {
-  assert.throws(() => nodeFindings('>=20', '24.21.3'), RangeError);
+test('Node.js: диапазоны из engines сравниваются через данные сборщика', async (t) => {
+  const index = [
+    { version: 'v26.0.0', lts: false },
+    { version: 'v24.21.3', lts: 'Krypton' },
+    { version: 'v22.21.1', lts: 'Jod' },
+  ];
+  const fetch = async () => new Response(JSON.stringify(index));
+  const findings = {};
+  for (const range of ['>=22', '^22']) {
+    const projectDir = await mkdtemp(join(tmpdir(), 'frontis-core-node-'));
+    t.after(() => rm(projectDir, { recursive: true, force: true }));
+    await writeFile(join(projectDir, 'package.json'), JSON.stringify({ engines: { node: range } }));
+    const result = await createNodeVersionCollector({ fetch })({ projectDir });
+    findings[range] = byMetric(nodeFindings(result.data));
+  }
+  assert.deepEqual(findings, { '>=22': {}, '^22': { 'node.major': 'high' } });
 });
 
 // Оценка проекта
