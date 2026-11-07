@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { PluginReport } from '@code-pushup/models';
 import {
   LCOV_FILES, TEST_RESULTS_FILE, fileStamp, type CoverageCommandState, type CoverageOptions, type TestCommandOptions,
 } from '../plugins/coverage-contract.js';
+import { JS_PACKAGES_PACKAGE, JS_PACKAGES_SLUG } from '../plugins/js-packages-contract.js';
 import { runGuardedPlugins, type GuardedPlugin } from './plugin-guard.js';
 import type { IEngineConfig } from './types/engine-config.js';
 
@@ -33,6 +35,22 @@ async function completedCommand(stateFile: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function combineJsPackagesReports(reports: PluginReport[]): PluginReport[] {
+  const parts = reports.filter(({ slug, packageName }) => slug === JS_PACKAGES_SLUG && packageName === JS_PACKAGES_PACKAGE);
+  if (parts.length !== 2 || parts[0].version !== parts[1].version) {
+    return reports;
+  }
+  const [first, second] = parts;
+  const audits = [...first.audits, ...second.audits];
+  const groups = [...(first.groups ?? []), ...(second.groups ?? [])];
+  if (new Set(audits.map(({ slug }) => slug)).size !== audits.length ||
+    new Set(groups.map(({ slug }) => slug)).size !== groups.length) {
+    return reports;
+  }
+  const combined = { ...first, audits, groups, duration: first.duration + second.duration };
+  return reports.flatMap((report) => report === first ? [combined] : report === second ? [] : [report]);
 }
 
 export async function runPlannedPlugins(plan: IEngineConfig) {
@@ -85,7 +103,8 @@ export async function runPlannedPlugins(plan: IEngineConfig) {
     ? [...plan.plugins, ...coverageTasks]
     : plan.plugins.flatMap((plugin) => plugin === coverage ? coverageTasks : [plugin]);
   try {
-    return await runGuardedPlugins(projectDir, plugins, preflight);
+    const { reports, noData } = await runGuardedPlugins(projectDir, plugins, preflight);
+    return { reports: combineJsPackagesReports(reports), noData };
   } finally {
     if (stateFile !== undefined) {
       try {

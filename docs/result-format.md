@@ -20,7 +20,7 @@
 | Показатель | Аудиты Code PushUp | Используемые данные |
 | --- | --- | --- |
 | `outdated` | `js-packages/npm-outdated-prod`, `js-packages/npm-outdated-dev`, `js-packages/frontis-outdated-evidence` | Число пакетов, тип обновления и версии. Подтверждение метаданных и знаменатель для доли по каждой группе |
-| `audit` | `js-packages/npm-audit-prod`, `js-packages/npm-audit-dev` | Число уязвимостей из `value`, уровень из сообщения, при его отсутствии используется `severity` |
+| `audit` | `js-packages/npm-audit-prod`, `js-packages/npm-audit-dev` | Число уязвимостей из `value`, уровень, пакет и сведения об исправлении из сообщения. При неизвестном уровне важность определяется по `severity` |
 | `unusedCode` | `frontis-knip` с аудитами `unused-files`, `unused-dependencies`, `unused-exports`, `unused-types`, `other-findings` | Числа из `value` и детали находок |
 | `codeQuality` | Аудиты правил `eslint/*`, `eslint/frontis-checked-files`, `eslint/frontis-parse-errors` и аудиты `frontis-prettier/*` | Ошибки, предупреждения, проверенные файлы и частые правила ESLint. Число файлов, которым нужно форматирование, и ошибки разбора Prettier |
 | `coverage` | `coverage/line-coverage`, `coverage/branch-coverage`, `coverage/function-coverage`, `coverage/frontis-lcov-date` и `frontis-tests/*` | Покрытие из `value`, дата LCOV из `displayValue`, разрывы до порога и цели. Итоги Jest и Vitest хранятся в проверке `tests` |
@@ -30,5 +30,7 @@
 Отчёт ESLint без подтверждённого охвата и без находок получает причину `eslint-coverage-unconfirmed`. В текущих запусках Frontis сохраняет охват отдельно. [Проверки качества кода](code-quality.md)
 
 При подтверждённых метаданных доли устаревших пакетов хранятся в `productionOutdatedPercent` и `developmentOutdatedPercent`. Устройство проверки описано в разделе об устаревших зависимостях. [Устаревшие зависимости](outdated-dependencies.md)
+
+Сведения об исправлении уязвимости хранятся в `checks[].details.issues[].fix`. [Уязвимости зависимостей](dependency-audit.md)
 
 Парная фикстура показывает частичный запуск с рабочими аудитами knip, ESLint и покрытия, а также пропуском Prettier. [Входной report.json](../test/fixtures/result/report.json) · [Ожидаемый result.json](../test/fixtures/result/result.json)

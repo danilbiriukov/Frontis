@@ -19,6 +19,10 @@ const npmOptions = {
   dependencyGroups: [...groupNames],
   auditLevelMapping: { critical: 'error', high: 'error', moderate: 'warning', low: 'info', info: 'info' },
 } satisfies NonNullable<Parameters<typeof jsPackagesPlugin>[0]>;
+
+export function createNpmPackagesPlugin(check: 'audit' | 'outdated'): Promise<PluginConfig> {
+  return jsPackagesPlugin({ ...npmOptions, checks: [check] });
+}
 const packageName = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
 const distTag = /^[a-z][a-z0-9._-]*$/i;
 const registryUnavailable: PluginProblem = {
@@ -166,7 +170,7 @@ export async function prepare(options: { packageManager?: string }, outputDir: s
     if (audits.length === 0) {
       return registryUnavailable;
     }
-    const plugin = await jsPackagesPlugin({ ...npmOptions, checks: ['outdated'] });
+    const plugin = await createNpmPackagesPlugin('outdated');
     const slugs = new Set(audits.map(({ slug }) => slug));
     return {
       ...plugin,

@@ -127,16 +127,49 @@ function dependencyIssues(audits: AuditReport[]): IResultIssue[] {
   }));
 }
 
+function npmAuditFix(suffix: string): IResultIssue['fix'] {
+  const [statement] = suffix.split(' More information: ', 1);
+  const range = /^ in (?:versions \*\*.+?\*\*|\*\*all\*\* versions)\.(?: (.+))?$/.exec(statement);
+  if (range === null) {
+    return undefined;
+  }
+  const fix = range[1];
+  if (fix === undefined) {
+    return { available: false };
+  }
+  if (fix === 'Fix is available.') {
+    return { available: true };
+  }
+  const target = /^Fix available: Update `([^`]+)` to version \*\*(.+?)\*\*( \(breaking change\))?\.$/.exec(fix);
+  return target === null ? undefined : {
+    available: true,
+    package: target[1],
+    version: target[2],
+    breaking: target[3] !== undefined,
+  };
+}
+
 function npmAudit(report: Report): ICheckEvidence {
   const plugin = 'js-packages';
   const audits = selectAudits(report, plugin, npmAuditSlugs);
   const totals = { critical: 0, high: 0, moderate: 0, low: 0, info: 0 };
   const items = dependencyIssues(audits).map((issue) => {
-    const match = /^`([^`]+)` dependency has an? \*\*(critical|high|moderate|low|info)\*\* vulnerability\b/.exec(issue.message);
-    const fallback = issue.severity === 'error' ? 'high' : issue.severity === 'warning' ? 'moderate' : 'low';
-    const level = match === null ? fallback : match[2] as keyof typeof totals;
-    totals[level] += 1;
-    return match === null ? issue : { ...issue, package: match[1], level };
+    const match = /^`([^`]+)`(?:'s dependency `([^`]+)`| dependency) has an? \*\*(critical|high|moderate|low|info)\*\* vulnerability\b/.exec(issue.message);
+    if (match === null) {
+      const fallback = issue.severity === 'error' ? 'high' : issue.severity === 'warning' ? 'moderate' : 'low';
+      totals[fallback] += 1;
+      return issue;
+    }
+    const [, directPackage, childPackage, level] = match;
+    const fix = npmAuditFix(issue.message.slice(match[0].length));
+    totals[level as keyof typeof totals] += 1;
+    return {
+      ...issue,
+      package: childPackage ?? directPackage,
+      ...(childPackage === undefined ? {} : { parentPackage: directPackage }),
+      level,
+      ...(fix === undefined ? {} : { fix }),
+    };
   });
   const [production, development] = npmAuditSlugs.map((slug) => count(audits, slug));
   const missingDetails = audits.some(({ value, details }) => value > 0 && !details?.issues?.length);
