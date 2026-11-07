@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@code-pushup/core": "0.126.4",
+    "@code-pushup/coverage-plugin": "0.126.4",
     "@code-pushup/eslint-plugin": "0.126.4",
     "@code-pushup/models": "0.126.4",
     "eslint": "9.39.5",

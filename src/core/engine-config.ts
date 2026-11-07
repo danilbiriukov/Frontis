@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { collectProjectInfo } from '../collectors/project-info.js';
+import { LCOV_FILES } from '../plugins/coverage-contract.js';
 import { findConfigFile, loadConfigFile } from './config-file.js';
 import { FRONTIS_OUTPUT_DIR, MODULE_NAMES, resolveConfig } from './config.js';
 import type { ModuleName, ResolvedConfig } from './config.js';
@@ -12,7 +13,6 @@ const ESLINT_CONFIGS = [
   'eslint.config.ts', 'eslint.config.mts', 'eslint.config.cts',
   '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.yaml', '.eslintrc.yml', '.eslintrc.json', '.eslintrc',
 ];
-const LCOV_REPORTS = ['coverage/lcov.info', 'lcov.info'] as const;
 
 const disabled: PluginProblem = {
   code: 'disabled',
@@ -43,7 +43,7 @@ export async function createEngineConfig(
   const [projectInfo, eslintrc, lcovFile, buildStats] = await Promise.all([
     collectProjectInfo({ projectDir }),
     findProjectFile(projectDir, ESLINT_CONFIGS),
-    findProjectFile(projectDir, LCOV_REPORTS),
+    findProjectFile(projectDir, LCOV_FILES),
     stat(buildDir).catch(() => undefined),
   ]);
   const metadata = projectInfo.status === 'ok' ? projectInfo.data : undefined;
@@ -56,7 +56,7 @@ export async function createEngineConfig(
     lint: { eslintrc },
     prettier: undefined,
     coverage: {
-      reports: [lcovFile ?? join(projectDir, LCOV_REPORTS[0])],
+      reports: [lcovFile ?? join(projectDir, LCOV_FILES[0])],
       testCommand: lcovFile === null ? testCommand : undefined,
     },
     'node-version': undefined,

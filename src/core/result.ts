@@ -1,5 +1,6 @@
 import type { AuditReport, Report } from '@code-pushup/models';
 import semver from 'semver';
+import { LCOV_DATE_AUDIT } from '../plugins/coverage-contract.js';
 import { ESLINT_CHECKED_FILES, ESLINT_PARSE_ERRORS } from '../plugins/eslint-evidence.js';
 import type { ModuleName, Thresholds } from './config.js';
 import type { Finding } from './importance.js';
@@ -12,6 +13,7 @@ import {
   lintFindings,
   nodeFindings,
   outdatedFindings,
+  testFindings,
   unusedCodeFindings,
 } from './rules.js';
 import { projectScore } from './score.js';
@@ -59,7 +61,8 @@ const invalidAudit: PluginProblem = {
 
 const npmAuditSlugs = ['npm-audit-prod', 'npm-audit-dev'];
 const outdatedSlugs = ['npm-outdated-prod', 'npm-outdated-dev'];
-const coverageSlugs = ['line-coverage', 'branch-coverage', 'function-coverage'];
+const coverageSlugs = ['line-coverage', 'branch-coverage', 'function-coverage', LCOV_DATE_AUDIT];
+const testSlugs = ['passed-tests', 'failed-tests', 'skipped-tests', 'failed-suites', 'test-run-complete'];
 const knipSlugs = ['unused-files', 'unused-dependencies', 'unused-exports', 'unused-types', 'other-findings'];
 const prettierSlugs = ['checked-files', 'unformatted-files', 'parse-errors'];
 const nodeSlugs = ['project-version', 'latest-lts', 'version-lag'];
@@ -287,11 +290,27 @@ function knip(report: Report): ICheckEvidence {
 function coverage(report: Report, thresholds: Thresholds['coverage']): ICheckEvidence {
   const plugin = 'coverage';
   const audits = selectAudits(report, plugin, coverageSlugs);
-  const [lines, branches, functions] = coverageSlugs.map((slug) => percent(audits, slug));
+  const lines = percent(audits, 'line-coverage');
+  const branches = percent(audits, 'branch-coverage');
+  const functions = percent(audits, 'function-coverage');
+  const lcovDate = findAudit(audits, LCOV_DATE_AUDIT);
+  const date = lcovDate?.displayValue;
+  const reportDate = lcovDate?.value === 1 && typeof date === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T/.test(date) && Number.isFinite(Date.parse(date)) ? date : undefined;
+  const { warn, target } = thresholds;
   return {
     plugin,
     audits,
-    facts: { lines, branches, functions },
+    facts: {
+      lines,
+      branches,
+      functions,
+      reportDate,
+      warn,
+      target,
+      gapToWarn: lines === undefined ? undefined : Math.max(0, warn - lines),
+      gapToTarget: lines === undefined ? undefined : Math.max(0, target - lines),
+    },
     findings: lines === undefined ? [] : coverageFindings(lines, thresholds),
     problem: auditProblem(audits, ['line-coverage'], [lines]),
   };
@@ -336,15 +355,39 @@ function buildSize(report: Report, thresholds: Thresholds['buildSize']): ICheckE
   };
 }
 
-function tests(): ICheckEvidence {
-  return {
-    plugin: 'tests', audits: [], facts: {}, findings: [],
-    problem: {
-      code: 'tests-report-unavailable',
-      reason: 'В отчёте нет итогов прогона тестов.',
-      action: 'Для итогов тестов требуется отдельная проверка Jest или Vitest.',
-    },
-  };
+function tests(report: Report): ICheckEvidence {
+  const plugin = 'frontis-tests';
+  const audits = selectAudits(report, plugin, testSlugs);
+  if (audits.length === 0) {
+    return {
+      plugin, audits, facts: {}, findings: [],
+      problem: {
+        code: 'tests-report-unavailable',
+        reason: 'В отчёте нет итогов прогона тестов.',
+        action: 'Для итогов тестов требуется отдельная проверка Jest или Vitest.',
+      },
+    };
+  }
+  const [passed, failed, skipped, failedSuites, completion] = testSlugs.map((slug) => count(audits, slug));
+  const complete = completion === 0 ? false : completion === 1 ? true : undefined;
+  const findings = testFindings({ failed: failed ?? 0, skipped: skipped ?? 0 });
+  if (failedSuites !== undefined && failedSuites > 0) {
+    findings.push({
+      module: 'coverage',
+      metric: 'tests.failedSuites',
+      importance: 'high',
+      current: String(failedSuites),
+      target: '0',
+      description: 'Исправьте ошибки запуска файлов с тестами.',
+    });
+  }
+  const problem = auditProblem(audits, testSlugs, [passed, failed, skipped, failedSuites, complete]) ??
+    (complete === false ? {
+      code: 'tests-incomplete',
+      reason: 'Не все тесты удалось выполнить.',
+      action: 'Проверьте отчёт прогона и повторите запуск тестов.',
+    } : undefined);
+  return { plugin, audits, facts: { passed, failed, skipped, failedSuites, complete }, findings, problem };
 }
 
 function createCheck(id: TCheckId, evidence: ICheckEvidence, context: IResultContext) {
@@ -407,7 +450,7 @@ export function createResult(report: Report, context: IResultContext): FrontisRe
   addIndicator('audit', [['audit', npmAudit(report)]]);
   addIndicator('unusedCode', [['knip', knip(report)]]);
   addIndicator('codeQuality', [['lint', eslint(report)], ['prettier', prettier(report)]]);
-  addIndicator('coverage', [['coverage', coverage(report, context.thresholds.coverage)], ['tests', tests()]]);
+  addIndicator('coverage', [['coverage', coverage(report, context.thresholds.coverage)], ['tests', tests(report)]]);
   if (context.modules['node-version'].enabled) {
     addIndicator('nodeVersion', [['node-version', nodeVersion(report)]]);
   }

@@ -1,6 +1,6 @@
 # Итоги Jest и Vitest
 
-`createTestResultsCollector({ reportFile })` читает JSON-отчёт уже выполненного прогона тестов. Путь `reportFile` задаётся от корня проекта. Сборщик не запускает тесты и не зависит от Code PushUp. Сам прогон относится к [#26](https://github.com/danilbiriukov/Frontis/issues/26).
+`createTestResultsCollector({ reportFile })` читает JSON-отчёт уже выполненного прогона тестов. Путь `reportFile` задаётся от корня проекта. Как Frontis запускает тесты и проверяет свежесть отчётов, описано в [проверке покрытия](coverage.md).
 
 ## Форматы и флаги
 
