@@ -22,7 +22,7 @@ export interface ProjectInfo {
     /** null для отсоединённого HEAD. */
     branch: string | null;
     /** null в репозитории без коммитов. */
-    commit: { hash: string; message: string; date: string } | null;
+    commit: { hash: string; message: string; date: string; author: string } | null;
   } | null;
   /** Окружение, в котором запущен Frontis, а не требования проекта. */
   runtime: { node: string };
@@ -64,16 +64,18 @@ function git(args: string[], context: CollectorContext): Promise<string | null> 
   });
 }
 
-async function readGit(context: CollectorContext): Promise<ProjectInfo['git']> {
-  if ((await git(['rev-parse', '--is-inside-work-tree'], context)) !== 'true') return null;
+export async function readProjectGit(context: CollectorContext): Promise<ProjectInfo['git']> {
+  if ((await git(['rev-parse', '--is-inside-work-tree'], context)) !== 'true') {
+    return null;
+  }
   const [branch, log] = await Promise.all([
     git(['symbolic-ref', '--quiet', '--short', 'HEAD'], context),
-    git(['log', '-1', '--format=%H%n%cI%n%s'], context),
+    git(['log', '-1', '--format=%H%n%aI%n%an%n%s'], context),
   ]);
-  const [hash, date, message = ''] = log ? log.split(/\r?\n/) : [];
+  const [hash, date, author = '', message = ''] = log ? log.split(/\r?\n/) : [];
   return {
     branch: branch || null,
-    commit: hash && date ? { hash, date, message } : null,
+    commit: hash && date ? { hash, date, author, message } : null,
   };
 }
 
@@ -95,7 +97,7 @@ export const collectProjectInfo: Collector<ProjectInfo> = async (context) => {
   }
 
   const fields = manifest as Fields;
-  const git = await readGit(context);
+  const git = await readProjectGit(context);
   context.signal?.throwIfAborted();
   const lockFiles = LOCK_FILES.map(([file]) => file).filter((file) => existsSync(join(context.projectDir, file)));
   return {

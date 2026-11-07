@@ -1,0 +1,72 @@
+{
+  "commit": null,
+  "packageName": "@code-pushup/core",
+  "version": "0.126.4",
+  "date": "2026-10-10T14:32:00.000Z",
+  "duration": 217000,
+  "plugins": [
+    {
+      "slug": "frontis-knip",
+      "title": "knip",
+      "icon": "knip",
+      "date": "2026-10-10T14:32:00.000Z",
+      "duration": 600,
+      "audits": [
+        { "slug": "unused-files", "title": "Неиспользуемые файлы", "value": 0, "score": 1 },
+        { "slug": "unused-dependencies", "title": "Неиспользуемые зависимости", "value": 0, "score": 1 },
+        { "slug": "unused-exports", "title": "Неиспользуемые экспорты", "value": 0, "score": 1 },
+        { "slug": "unused-types", "title": "Неиспользуемые типы", "value": 0, "score": 1 },
+        { "slug": "other-findings", "title": "Другие находки knip", "value": 0, "score": 1 }
+      ],
+      "groups": [
+        {
+          "slug": "unused",
+          "title": "Неиспользуемый код",
+          "refs": [{ "slug": "unused-files", "weight": 1 }]
+        }
+      ]
+    },
+    {
+      "slug": "eslint",
+      "title": "ESLint",
+      "icon": "eslint",
+      "date": "2026-10-10T14:32:01.000Z",
+      "duration": 1200,
+      "audits": [
+        {
+          "slug": "no-unused-vars",
+          "title": "no-unused-vars",
+          "value": 1,
+          "score": 0,
+          "details": {
+            "issues": [
+              {
+                "message": "'unused' is assigned a value but never used.",
+                "severity": "error",
+                "source": { "file": "src/demo.js", "position": { "startLine": 2, "startColumn": 9 } }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "slug": "coverage",
+      "title": "Покрытие",
+      "icon": "codecov",
+      "date": "2026-10-10T14:32:02.000Z",
+      "duration": 500,
+      "audits": [
+        { "slug": "line-coverage", "title": "Покрытие строк", "value": 78.4, "score": 0.784 },
+        { "slug": "branch-coverage", "title": "Покрытие ветвей", "value": 50, "score": 0.5 }
+      ]
+    }
+  ],
+  "categories": [
+    {
+      "slug": "code",
+      "title": "Код",
+      "refs": [{ "type": "group", "plugin": "frontis-knip", "slug": "unused", "weight": 1 }]
+    }
+  ]
+}

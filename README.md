@@ -29,6 +29,7 @@
 ## Структура
 
 - `src/core` ядро, запуск и [подготовка конфигурации движка](docs/engine-config.md)
+- [Формат результатов](docs/result-format.md)
 - `src/collectors` [контракт модулей сбора данных](docs/collector-contract.md)
 - `src/plugins` [плагины Frontis для Code PushUp](docs/frontis-plugins.md)
 - `src/report` сборка HTML-отчёта

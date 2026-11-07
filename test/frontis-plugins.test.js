@@ -93,9 +93,11 @@ test('frontis run собирает аудиты knip и Prettier с настро
     cwd: dir, encoding: 'utf8',
   });
   assert.equal(status, 0, `${stdout}\n${stderr}`);
-  assert.match(stdout, /Аудиты Frontis: 8\. Модули без данных: 2/);
+  assert.match(stdout, /Аудиты Frontis: 8\. Модули без данных: 6/);
   const noData = JSON.parse(await readFile(join(dir, '.frontis', 'no-data.json'), 'utf8'));
   assert.deepEqual(noData.map(({ plugin, code }) => [plugin, code]), [
+    ['outdated', 'no-package-manager'], ['audit', 'no-package-manager'],
+    ['lint', 'no-eslint-config'], ['coverage', 'no-lcov'],
     ['node-version', 'disabled'], ['build-size', 'disabled'],
   ]);
 });
