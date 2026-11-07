@@ -174,7 +174,11 @@
           ],
           "facts": {
             "lines": 78.4,
-            "branches": 50
+            "branches": 50,
+            "warn": 65,
+            "target": 90,
+            "gapToWarn": 0,
+            "gapToTarget": 11.599999999999994
           }
         },
         {

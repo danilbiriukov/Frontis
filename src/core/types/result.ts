@@ -7,7 +7,7 @@ import type { Status } from '../status.js';
 
 export type TIndicatorId = 'outdated' | 'audit' | 'unusedCode' | 'codeQuality' | 'coverage' | 'nodeVersion' | 'buildSize';
 export type TCheckId = Exclude<ModuleName, 'project-info'> | 'tests';
-export type TResultFact = number | string | null;
+export type TResultFact = number | string | boolean | null;
 
 export interface IResultIssue extends Issue {
   audit: string;

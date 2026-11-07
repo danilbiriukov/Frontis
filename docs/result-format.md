@@ -23,12 +23,12 @@
 | `audit` | `js-packages/npm-audit-prod`, `js-packages/npm-audit-dev` | Число уязвимостей из `value`, уровень из сообщения, при его отсутствии используется `severity` |
 | `unusedCode` | `frontis-knip` с аудитами `unused-files`, `unused-dependencies`, `unused-exports`, `unused-types`, `other-findings` | Числа из `value` и детали находок |
 | `codeQuality` | Аудиты правил `eslint/*`, `eslint/frontis-checked-files`, `eslint/frontis-parse-errors` и аудиты `frontis-prettier/*` | Ошибки, предупреждения, проверенные файлы и частые правила ESLint. Число файлов, которым нужно форматирование, и ошибки разбора Prettier |
-| `coverage` | `coverage/line-coverage`, `coverage/branch-coverage`, `coverage/function-coverage` | Проценты из `value`. Статус покрытия определяется по строкам. Итоги Jest и Vitest относятся к отдельной проверке `tests` |
+| `coverage` | `coverage/line-coverage`, `coverage/branch-coverage`, `coverage/function-coverage`, `coverage/frontis-lcov-date` и `frontis-tests/*` | Покрытие из `value`, дата LCOV из `displayValue`, разрывы до порога и цели. Итоги Jest и Vitest хранятся в проверке `tests` |
 | `nodeVersion` | `frontis-node-version/project-version`, `frontis-node-version/latest-lts`, `frontis-node-version/version-lag` | Версии из `displayValue`, тип отставания из `value` |
 | `buildSize` | `frontis-build-size/size-bytes`, `frontis-build-size/file-count`, `frontis-build-size/limit-bytes` | Размер, число файлов и предел из `value`, крупнейшие файлы из `details.table.rows` |
 
 Отчёт ESLint без подтверждённого охвата и без находок получает причину `eslint-coverage-unconfirmed`. В текущих запусках Frontis сохраняет охват отдельно. [Проверки качества кода](code-quality.md)
 
-Ноль устаревших пакетов без подтверждённого ответа реестра даёт причину `registry-unconfirmed`. Подключение проверок зависимостей и покрытия описано в задачах [#22](https://github.com/danilbiriukov/Frontis/issues/22), [#23](https://github.com/danilbiriukov/Frontis/issues/23) и [#26](https://github.com/danilbiriukov/Frontis/issues/26).
+Ноль устаревших пакетов без подтверждённого ответа реестра даёт причину `registry-unconfirmed`. Подключение проверок зависимостей описано в задачах [#22](https://github.com/danilbiriukov/Frontis/issues/22) и [#23](https://github.com/danilbiriukov/Frontis/issues/23).
 
 Парная фикстура показывает частичный запуск с рабочими аудитами knip, ESLint и покрытия, а также пропуском Prettier. [Входной report.json](../test/fixtures/result/report.json) · [Ожидаемый result.json](../test/fixtures/result/result.json)

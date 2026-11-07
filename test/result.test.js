@@ -43,6 +43,17 @@ function check(result, id) {
   return found;
 }
 
+function plugin(slug, audits) {
+  return {
+    slug,
+    title: slug,
+    icon: 'file',
+    date: report.date,
+    duration: 1,
+    audits: audits.map((audit) => ({ score: 1, title: audit.slug, ...audit })),
+  };
+}
+
 test('частичный Report с категориями и commit: null даёт зафиксированный result.json', () => {
   const result = createResult(report, context());
   assert.deepEqual(result, expected);
@@ -87,7 +98,7 @@ test('неожиданный тип покрытия строк не испол�
   const result = createResult(malformed, context());
   assert.equal(indicator(result, 'coverage').status, 'no-data');
   assert.equal(check(result, 'coverage').code, 'invalid-audit-value');
-  assert.deepEqual(check(result, 'coverage').facts, { branches: 50 });
+  assert.deepEqual(check(result, 'coverage').facts, { branches: 50, warn: 65, target: 90 });
   assert.equal(result.score.value, null);
 });
 
@@ -108,7 +119,94 @@ test('аудиты #39 преобразуются в уровни, версии 
   assert.deepEqual(check(result, 'lint').facts, { errors: 1, warnings: 1 });
   assert.deepEqual(check(result, 'coverage').facts, {
     lines: 66.66666666666666, branches: 50, functions: 100,
+    warn: 65, target: 90, gapToWarn: 0, gapToTarget: 90 - 66.66666666666666,
   });
+});
+
+test('покрытие хранит дату LCOV, настроенные пороги и разрывы в процентных пунктах', () => {
+  const reportWithDate = structuredClone(report);
+  const coverage = reportWithDate.plugins.find(({ slug }) => slug === 'coverage');
+  coverage.audits.find(({ slug }) => slug === 'line-coverage').value = 56;
+  const reportDate = '2026-10-10T14:31:00.000Z';
+  coverage.audits.push({ slug: 'frontis-lcov-date', title: 'Дата LCOV', score: 1, value: 1, displayValue: reportDate });
+  const options = context();
+  options.thresholds.coverage = { warn: 60, target: 82 };
+  const result = createResult(reportSchema.parse(reportWithDate), options);
+  assert.deepEqual(check(result, 'coverage').facts, {
+    lines: 56, branches: 50, reportDate, warn: 60, target: 82, gapToWarn: 4, gapToTarget: 26,
+  });
+  assert(check(result, 'coverage').audits.includes('coverage/frontis-lcov-date'));
+  assert.equal(indicator(result, 'coverage').status, 'fix');
+});
+
+test('подтверждённые падения и пропуски остаются при неполном прогоне без покрытия', () => {
+  const source = { file: 'test/cart.test.js', position: { startLine: 12 } };
+  const withTests = reportSchema.parse({
+    ...report,
+    plugins: [
+      ...report.plugins.filter(({ slug }) => slug !== 'coverage'),
+      plugin('frontis-tests', [
+        { slug: 'passed-tests', value: 3 },
+        {
+          slug: 'failed-tests', value: 1,
+          details: { issues: [{ message: 'Возвращает стоимость заказа', severity: 'error', source }] },
+        },
+        { slug: 'skipped-tests', value: 2 },
+        {
+          slug: 'failed-suites', value: 1,
+          details: { issues: [{ message: 'Файл тестов не выполнился', severity: 'error', source: { file: 'test/order.test.js' } }] },
+        },
+        { slug: 'test-run-complete', value: 0 },
+      ]),
+    ],
+  });
+  const result = createResult(withTests, context({ noData: [{
+    plugin: 'coverage',
+    code: 'test-command-failed',
+    reason: 'Команда тестов завершилась с ошибкой.',
+    action: 'Исправьте тесты и повторите прогон.',
+  }] }));
+  assert.equal(check(result, 'coverage').status, 'no-data');
+  assert.equal(check(result, 'coverage').code, 'test-command-failed');
+  assert.deepEqual(check(result, 'coverage').facts, { warn: 65, target: 90 });
+  const tests = check(result, 'tests');
+  assert.equal(tests.status, 'no-data');
+  assert.equal(tests.code, 'tests-incomplete');
+  assert.deepEqual(tests.facts, { passed: 3, failed: 1, skipped: 2, failedSuites: 1, complete: false });
+  assert.deepEqual(tests.details.issues[0].source, source);
+  assert.equal(tests.details.issues[0].audit, 'frontis-tests/failed-tests');
+  assert.equal(tests.details.issues[1].audit, 'frontis-tests/failed-suites');
+  const coverage = indicator(result, 'coverage');
+  assert.equal(coverage.status, 'fix');
+  assert.equal(coverage.incomplete, true);
+  assert.deepEqual(coverage.findings.map(({ kind, importance }) => [kind, importance]), [
+    ['tests.failed', 'high'], ['tests.skipped', 'low'], ['tests.failedSuites', 'high'],
+  ]);
+  assert.deepEqual(result.recommendations.filter(({ indicator }) => indicator === 'coverage').map(({ importance }) => importance), [
+    'high', 'high', 'low',
+  ]);
+});
+
+test('завершённый прогон тестов учитывается отдельно при отсутствии покрытия', () => {
+  const withTests = reportSchema.parse({
+    ...report,
+    plugins: [
+      ...report.plugins.filter(({ slug }) => slug !== 'coverage'),
+      plugin('frontis-tests', [
+        { slug: 'passed-tests', value: 3 },
+        { slug: 'failed-tests', value: 0 },
+        { slug: 'skipped-tests', value: 0 },
+        { slug: 'failed-suites', value: 0 },
+        { slug: 'test-run-complete', value: 1 },
+      ]),
+    ],
+  });
+  const result = createResult(withTests, context());
+  assert.equal(check(result, 'coverage').status, 'no-data');
+  assert.equal(check(result, 'tests').status, 'ok');
+  assert.equal(check(result, 'tests').facts.complete, true);
+  assert.equal(indicator(result, 'coverage').status, 'ok');
+  assert.equal(indicator(result, 'coverage').incomplete, true);
 });
 
 test('ESLint и npm outdated с неподтверждёнными нулями дают «Нет данных»', () => {
@@ -131,16 +229,6 @@ test('ESLint и npm outdated с неподтверждёнными нулями 
 });
 
 test('Prettier, версия Node.js и размер сборки передают факты, находки и детали', () => {
-  function plugin(slug, audits) {
-    return {
-      slug,
-      title: slug,
-      icon: 'file',
-      date: report.date,
-      duration: 1,
-      audits: audits.map((audit) => ({ score: 1, title: audit.slug, ...audit })),
-    };
-  }
   const reportWithPlugins = reportSchema.parse({
     ...report,
     plugins: [
