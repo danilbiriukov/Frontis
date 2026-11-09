@@ -8,6 +8,7 @@ import { withCurrentRun, writeResultArtifacts } from './run-artifacts.js';
 import { runPlannedPlugins } from './run-plan.js';
 import { createRunProgress } from './run-progress.js';
 import type { TEngineAdapters } from './types/engine-config.js';
+import { generateHtmlReport, openReportFile, writeReportFile } from '../report/index.js';
 
 const adapters = {
   outdated: new URL('../plugins/js-packages.js', import.meta.url).href,
@@ -22,6 +23,7 @@ const adapters = {
 
 export interface RunOptions {
   cwd: string;
+  open?: boolean;
 }
 
 export async function run(options: RunOptions): Promise<number> {
@@ -44,6 +46,22 @@ export async function run(options: RunOptions): Promise<number> {
       });
       if (report === undefined) {
         progress.summary(0);
+        const html = generateHtmlReport({
+          noData,
+          project: {
+            name: projectInfo?.name ?? null,
+            version: projectInfo?.version ?? null,
+            branch: git?.branch ?? null,
+            commit: git?.commit?.hash ?? null,
+          },
+        });
+        try {
+          const reportFile = await writeReportFile(html, plan.config.outFile);
+          console.log(`Диагностический отчёт: ${reportFile}`);
+        } catch (writeError) {
+          const message = writeError instanceof Error ? writeError.message : String(writeError);
+          console.error(`Ошибка записи отчёта: ${message}`);
+        }
         return 2;
       }
       const result = createResult(report, {
@@ -54,8 +72,27 @@ export async function run(options: RunOptions): Promise<number> {
         noData,
       });
       await writeResultArtifacts(plan.outputDir, report, result);
+      const html = generateHtmlReport({ result, report, noData });
+      let reportFile: string;
+      try {
+        reportFile = await writeReportFile(html, plan.config.outFile);
+        console.log(`Отчёт: ${reportFile}`);
+      } catch (writeError) {
+        const message = writeError instanceof Error ? writeError.message : String(writeError);
+        console.error(`Ошибка записи отчёта: ${message}`);
+        return 2;
+      }
       const audits = report.plugins.reduce((count, plugin) => count + plugin.audits.length, 0);
       progress.summary(audits);
+      const shouldOpen = options.open ?? plan.config.open;
+      if (shouldOpen) {
+        try {
+          await openReportFile(reportFile);
+        } catch (openError) {
+          const message = openError instanceof Error ? openError.message : String(openError);
+          console.error(message);
+        }
+      }
       return 0;
     });
   } catch (error) {

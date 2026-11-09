@@ -9,8 +9,8 @@ import { reportSchema } from '@code-pushup/models';
 const cli = join(import.meta.dirname, '..', 'dist', 'cli.js');
 const { version } = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8'));
 
-const frontis = (args, cwd = import.meta.dirname) =>
-  spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8' });
+const frontis = (args, cwd = import.meta.dirname, env = {}) =>
+  spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env: { ...process.env, FRONTIS_TEST_SKIP_OPEN: '1', ...env } });
 
 test('--help выводит справку', () => {
   const { status, stdout } = frontis(['--help']);
@@ -76,6 +76,8 @@ test('run без доступных аудитов возвращает 2 и с�
   assert.equal(status, 2);
   assert.match(stdout, /frontis\.config\.mjs/);
   assert.match(stdout, /Аудиты Frontis: 0\. Модули без данных: 8\. Успешные проверки: 0\. Ошибки: 0\./);
+  assert.match(stdout, /Диагностический отчёт:.*report\.html/);
+  assert.equal(existsSync(join(outputDir, 'report.html')), true);
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
     outdated: 'no-package-json',
@@ -102,9 +104,11 @@ test('run собирает аудиты сборки вне Git и продол�
   assert.match(stdout, /^\[build-size\] ожидает$/m);
   assert.match(stdout, /\[build-size\] запущен\r?\n\[build-size\] готово/);
   assert.match(stdout, /^\[lint\] нет данных$/m);
-  assert.match(stdout, /Аудиты Frontis: 3\. Модули без данных: 7\. Успешные проверки: 1\. Ошибки: 0\./);
-  assert.equal(stdout.includes('\x1b'), false);
   const outputDir = join(dir, '.frontis');
+  assert.match(stdout, /Аудиты Frontis: 3\. Модули без данных: 7\. Успешные проверки: 1\. Ошибки: 0\./);
+  assert.match(stdout, /Отчёт:.*report\.html/);
+  assert.equal(existsSync(join(outputDir, 'report.html')), true);
+  assert.equal(stdout.includes('\x1b'), false);
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
     outdated: 'no-package-json',
@@ -152,4 +156,16 @@ test('run с ошибкой в конфиге — код 2, имя поля и �
   assert.equal(status, 2);
   assert.match(stderr, /name: неизвестное поле/);
   assert.doesNotMatch(stderr, /\s+at\s/);
+});
+
+test('run с флагом --open принимает опцию и завершает проверку', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }));
+  writeFileSync(join(dir, 'frontis.config.mjs'), "export default { modules: { 'node-version': { enabled: false } } };");
+  mkdirSync(join(dir, 'dist'));
+  writeFileSync(join(dir, 'dist', 'index.js'), 'export {};');
+  const { status, stdout } = frontis(['run', '--open'], dir);
+  assert.equal(status, 0);
+  assert.match(stdout, /Отчёт:.*report\.html/);
+  assert.equal(existsSync(join(dir, '.frontis', 'report.html')), true);
 });

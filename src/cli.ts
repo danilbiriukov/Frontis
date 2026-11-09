@@ -2,12 +2,15 @@
 import { run } from './core/index.js';
 import { frontisVersion } from './core/package-info.js';
 
-const HELP = `frontis: аудит фронтенд-проекта с результатами в JSON
+const HELP = `frontis: аудит фронтенд-проекта с результатами в JSON и HTML
 
 Использование:
-  frontis run          запустить проверки в текущей папке
+  frontis run [опции]  запустить проверки в текущей папке
   frontis --help       показать эту справку
-  frontis --version    показать версию`;
+  frontis --version    показать версию
+
+Опции run:
+  --open, -o           открыть HTML-отчёт в браузере после завершения`;
 
 const isHelp = (arg: string | undefined): boolean => arg === '-h' || arg === '--help';
 
@@ -32,9 +35,15 @@ async function main(argv: string[]): Promise<number> {
       console.log(HELP);
       return 0;
     }
-    // Флагов у run пока нет: любой аргумент — ошибка, а не молчаливый пропуск
-    if (rest.length > 0) return unknownArgument(rest[0]);
-    return run({ cwd: process.cwd() });
+    let open: boolean | undefined;
+    for (const arg of rest) {
+      if (arg === '--open' || arg === '-o') {
+        open = true;
+      } else {
+        return unknownArgument(arg);
+      }
+    }
+    return run({ cwd: process.cwd(), open });
   }
 
   console.error(`Неизвестная команда: ${command}\nСписок команд: frontis --help`);
