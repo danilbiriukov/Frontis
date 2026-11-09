@@ -35,3 +35,5 @@ export { createBuildSizePlugin } from './plugins/build-size.js';
 export { createKnipPlugin } from './plugins/knip.js';
 export { createNodeVersionPlugin } from './plugins/node-version.js';
 export { createPrettierPlugin } from './plugins/prettier.js';
+export { generateHtmlReport, openReportFile, writeReportFile } from './report/index.js';
+export type { GenerateReportOptions } from './report/index.js';
