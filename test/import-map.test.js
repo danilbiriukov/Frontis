@@ -126,3 +126,14 @@ test('без исходников возвращается «Нет данных
   assert.equal(result.status, 'no-data');
   assert.equal(result.code, 'no-sources');
 });
+
+test('длинная последовательность цифр без версии не задерживает сортировку', () => {
+  const moduleUrl = new URL('../dist/collectors/import-map.js', import.meta.url).href;
+  execFileSync(process.execPath, ['--input-type=module', '-e', [
+    "import assert from 'node:assert/strict';",
+    "import { selectMostOutdated } from " + JSON.stringify(moduleUrl) + ";",
+    "const invalid = { name: 'a', current: '9'.repeat(250_000), latest: '3.0.0' };",
+    "const valid = { name: 'b', current: '^2.0.0', latest: 'v3.0.0-rc.1' };",
+    "assert.deepEqual(selectMostOutdated([invalid, valid], 1), [valid]);",
+  ].join('\n')], { timeout: 5000 });
+});

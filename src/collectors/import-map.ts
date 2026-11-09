@@ -34,7 +34,8 @@ const SPECIFIER = /(?:\bfrom|\bimport|\brequire\s*\(|\bimport\s*\()\s*(['"`])([^
 const GIT_TIMEOUT_MS = 10_000;
 
 function parseVersion(version: string): number[] | undefined {
-  const match = version.match(/(\d+)\.(\d+)\.(\d+)/);
+  // Поиск начинается только с первой цифры группы.
+  const match = version.match(/(?<!\d)(\d+)\.(\d+)\.(\d+)/);
   return match ? match.slice(1, 4).map(Number) : undefined;
 }
 
