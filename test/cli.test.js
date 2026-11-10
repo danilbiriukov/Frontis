@@ -71,13 +71,14 @@ test('run без доступных аудитов возвращает 2 и с�
   mkdirSync(outputDir);
   writeFileSync(join(outputDir, 'report.json'), '{"previous":true}');
   writeFileSync(join(outputDir, 'result.json'), '{"previous":true}');
+  writeFileSync(join(outputDir, 'report.html'), '<html>Предыдущий результат</html>');
   writeFileSync(join(dir, 'frontis.config.mjs'), 'export default {};');
   const { status, stdout } = frontis(['run'], dir);
   assert.equal(status, 2);
   assert.match(stdout, /frontis\.config\.mjs/);
   assert.match(stdout, /Аудиты Frontis: 0\. Модули без данных: 8\. Успешные проверки: 0\. Ошибки: 0\./);
   assert.match(stdout, /Диагностический отчёт:.*report\.html/);
-  assert.equal(existsSync(join(outputDir, 'report.html')), true);
+  assert.doesNotMatch(readFileSync(join(outputDir, 'report.html'), 'utf8'), /Предыдущий результат/);
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
     outdated: 'no-package-json',
@@ -168,4 +169,56 @@ test('run с флагом --open принимает опцию и заверша
   assert.equal(status, 0);
   assert.match(stdout, /Отчёт:.*report\.html/);
   assert.equal(existsSync(join(dir, '.frontis', 'report.html')), true);
+});
+
+test('run --fail-on учитывает статусы показателей и сохраняет отчёт', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const config = join(dir, 'frontis.config.mjs');
+  writeFileSync(config, "export default { modules: { 'node-version': { enabled: false } } };");
+  const coverage = join(dir, 'lcov.info');
+  writeFileSync(coverage, 'TN:\nSF:src/index.js\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nDA:5,0\nLF:5\nLH:4\nend_of_record\n');
+
+  const plan = frontis(['run', '--fail-on', 'plan'], dir);
+  assert.equal(plan.status, 1, plan.stderr);
+  assert.equal(existsSync(join(dir, '.frontis', 'report.html')), true);
+  assert.equal(frontis(['run', '--fail-on', 'fix'], dir).status, 0);
+
+  writeFileSync(coverage, 'TN:\nSF:src/index.js\nDA:1,0\nLF:1\nLH:0\nend_of_record\n');
+  assert.equal(frontis(['run', '--fail-on', 'fix'], dir).status, 1);
+
+  rmSync(coverage);
+  const failed = frontis(['run', '--fail-on', 'plan'], dir);
+  assert.equal(failed.status, 2, failed.stderr);
+  assert.match(failed.stdout, /Диагностический отчёт/);
+  assert.equal(existsSync(join(dir, '.frontis', 'result.json')), false);
+});
+
+test('run --fail-on отклоняет отсутствующий или неподдерживаемый порог', () => {
+  for (const args of [[], ['ok'], ['no-data']]) {
+    const { status, stderr } = frontis(['run', '--fail-on', ...args]);
+    assert.equal(status, 2);
+    assert.match(stderr, /--fail-on.*plan.*fix/);
+  }
+});
+
+test('open использует outFile и открывает сохранённый отчёт без аудита', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'frontis.config.mjs'), "export default { outFile: 'прошлый отчёт.html' };");
+  const report = join(dir, 'прошлый отчёт.html');
+
+  const missing = frontis(['open'], dir);
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /Отчёт не найден/);
+  mkdirSync(report);
+  assert.equal(frontis(['open'], dir).status, 2);
+  rmSync(report, { recursive: true });
+
+  writeFileSync(report, '<html>Готовый отчёт</html>');
+  const opened = frontis(['open'], dir);
+  assert.equal(opened.status, 0, opened.stderr);
+  assert.match(opened.stdout, /прошлый отчёт\.html/);
+  assert.equal(readFileSync(report, 'utf8'), '<html>Готовый отчёт</html>');
+  assert.equal(existsSync(join(dir, '.frontis')), false);
 });

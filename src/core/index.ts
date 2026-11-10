@@ -24,6 +24,7 @@ const adapters = {
 export interface RunOptions {
   cwd: string;
   open?: boolean;
+  failOn?: 'plan' | 'fix';
 }
 
 export async function run(options: RunOptions): Promise<number> {
@@ -92,6 +93,10 @@ export async function run(options: RunOptions): Promise<number> {
           const message = openError instanceof Error ? openError.message : String(openError);
           console.error(message);
         }
+      }
+      const { failOn } = options;
+      if (failOn !== undefined && result.indicators.some(({ status }) => status === 'fix' || status === failOn)) {
+        return 1;
       }
       return 0;
     });
