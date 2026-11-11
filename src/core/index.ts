@@ -3,7 +3,7 @@ import { loadEngineConfig } from './engine-config.js';
 import { ConfigError } from './errors.js';
 import { frontisVersion } from './package-info.js';
 import { createReport } from './report.js';
-import { createResult } from './result.js';
+import { createResult, createResultImportMap } from './result.js';
 import { withCurrentRun, writeResultArtifacts } from './run-artifacts.js';
 import { runPlannedPlugins } from './run-plan.js';
 import { createRunProgress } from './run-progress.js';
@@ -49,6 +49,7 @@ export async function run(options: RunOptions): Promise<number> {
         progress.summary(0);
         const html = generateHtmlReport({
           noData,
+          runAt,
           project: {
             name: projectInfo?.name ?? null,
             version: projectInfo?.version ?? null,
@@ -71,6 +72,7 @@ export async function run(options: RunOptions): Promise<number> {
         modules,
         thresholds,
         noData,
+        importMap: await createResultImportMap(report, projectDir, modules.outdated),
       });
       await writeResultArtifacts(plan.outputDir, report, result);
       const html = generateHtmlReport({ result, report, noData });

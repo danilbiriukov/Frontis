@@ -112,8 +112,8 @@ test('generateHtmlReport экранирует XSS-нагрузки в сообщ
 });
 
 test('generateHtmlReport ограничивает число находок десятью записями', () => {
-  const manyIssues = Array.from({ length: 15 }, (_, i) => ({
-    message: `Issue #${i + 1}`,
+  const manyIssues = Array.from({ length: 20_000 }, (_, i) => ({
+    message: `Issue #${i + 1} ${'long detail '.repeat(20)}`,
     severity: 'error',
     source: { file: `file-${i + 1}.js`, position: { startLine: i + 1 } },
     audit: 'test-audit',
@@ -143,7 +143,26 @@ test('generateHtmlReport ограничивает число находок де
   const html = generateHtmlReport({ result: resultWithManyIssues });
   assert.match(html, /Issue #10/);
   assert.doesNotMatch(html, /Issue #11/);
-  assert.match(html, /Показано 10 из 15 находок/);
+  assert.match(html, /Показано 10 из 20000 находок/);
+  assert.match(html, /Полный список.*report\.json/);
+  assert.ok(Buffer.byteLength(html, 'utf8') < 1_000_000);
+});
+
+test('HTML показывает причину и действие для частично выполненной проверки', () => {
+  const result = structuredClone(fixtureResult);
+  const outdated = result.indicators.find(({ id }) => id === 'outdated');
+  outdated.status = 'plan';
+  outdated.incomplete = true;
+  Object.assign(outdated.checks[0], {
+    status: 'plan',
+    incomplete: true,
+    reason: 'Часть версий недоступна <реестр>.',
+    action: 'Проверьте настройки npm.',
+  });
+
+  const html = generateHtmlReport({ result });
+  assert.match(html, /Часть версий недоступна &lt;реестр&gt;\./);
+  assert.match(html, /Проверьте настройки npm\./);
 });
 
 test('generateHtmlReport без result формирует диагностический отчет', () => {

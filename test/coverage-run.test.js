@@ -177,5 +177,7 @@ test('тайм-аут команды тестов не пропускает LCOV
   const codes = Object.fromEntries((await output.json('no-data.json')).map(({ plugin, code }) => [plugin, code]));
   assert.equal(codes.tests, 'timeout');
   assert.equal(codes.coverage, 'test-command-unconfirmed');
+  assert.match(output.stdout, /^\[coverage\] нет данных$/m);
+  assert.doesNotMatch(output.stdout, /^\[coverage\] запущен$/m);
   assert((await stat(join(dir, 'lcov.info'))).isFile());
 });

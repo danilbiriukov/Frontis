@@ -78,7 +78,9 @@ test('run без доступных аудитов возвращает 2 и с�
   assert.match(stdout, /frontis\.config\.mjs/);
   assert.match(stdout, /Аудиты Frontis: 0\. Модули без данных: 8\. Успешные проверки: 0\. Ошибки: 0\./);
   assert.match(stdout, /Диагностический отчёт:.*report\.html/);
-  assert.doesNotMatch(readFileSync(join(outputDir, 'report.html'), 'utf8'), /Предыдущий результат/);
+  const html = readFileSync(join(outputDir, 'report.html'), 'utf8');
+  assert.doesNotMatch(html, /Предыдущий результат/);
+  assert.ok(html.includes(`Frontis v${version}`));
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
     outdated: 'no-package-json',
@@ -131,6 +133,29 @@ test('run собирает аудиты сборки вне Git и продол�
   assert.equal(result.score.known, 1);
   assert.equal(result.indicators.find(({ id }) => id === 'buildSize').status, 'ok');
   assert.equal(existsSync(join(dir, '.git')), false);
+
+  writeFileSync(join(dir, 'dist', 'index.js'), 'export const updated = true;');
+  const repeated = frontis(['run'], dir);
+  assert.equal(repeated.status, 0, repeated.stderr);
+  const latest = reportSchema.parse(JSON.parse(readFileSync(join(outputDir, 'report.json'), 'utf8')));
+  assert.notEqual(latest.date, report.date);
+  assert.equal(latest.plugins[0].audits.find(({ slug }) => slug === 'size-bytes').value, 28);
+  assert.match(readFileSync(join(outputDir, 'report.html'), 'utf8'), /28 Б/);
+});
+
+test('run отклоняет outFile, занятый служебными файлами, до запуска проверок', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const output = join(dir, '.frontis');
+  mkdirSync(output);
+  writeFileSync(join(output, 'report.json'), '{"previous":true}');
+  const filename = process.platform === 'win32' ? 'REPORT.JSON' : 'report.json';
+  writeFileSync(join(dir, 'frontis.config.mjs'), `export default { outFile: '.frontis/${filename}' };`);
+
+  const { status, stderr } = frontis(['run'], dir);
+  assert.equal(status, 2);
+  assert.match(stderr, /outFile.*служебн/);
+  assert.equal(readFileSync(join(output, 'report.json'), 'utf8'), '{"previous":true}');
 });
 
 test('run возвращает 2, если каталог результатов недоступен', (t) => {
@@ -221,4 +246,18 @@ test('open использует outFile и открывает сохранённ
   assert.match(opened.stdout, /прошлый отчёт\.html/);
   assert.equal(readFileSync(report, 'utf8'), '<html>Готовый отчёт</html>');
   assert.equal(existsSync(join(dir, '.frontis')), false);
+});
+
+test('open сообщает путь к файлу, если системная команда не открыла отчёт', {
+  skip: process.platform !== 'linux',
+}, (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'frontis.config.mjs'), "export default { outFile: 'отчёт.html' };");
+  writeFileSync(join(dir, 'отчёт.html'), '<html>Готовый отчёт</html>');
+  writeFileSync(join(dir, 'xdg-open'), '#!/bin/sh\nexit 3\n', { mode: 0o755 });
+
+  const { status, stderr } = frontis(['open'], dir, { FRONTIS_TEST_SKIP_OPEN: '0', PATH: dir });
+  assert.equal(status, 2);
+  assert.match(stderr, /Не удалось открыть отчёт.*отчёт\.html/);
 });

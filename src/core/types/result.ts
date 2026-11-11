@@ -1,4 +1,5 @@
 import type { AuditReport, Issue } from '@code-pushup/models';
+import type { ImportMapData } from '../../collectors/import-map.js';
 import type { ModuleName, ResolvedConfig, Thresholds } from '../config.js';
 import type { Finding, Importance } from '../importance.js';
 import type { PluginNoData, PluginProblem } from '../plugin-guard.js';
@@ -8,6 +9,7 @@ import type { Status } from '../status.js';
 export type TIndicatorId = 'outdated' | 'audit' | 'unusedCode' | 'codeQuality' | 'coverage' | 'nodeVersion' | 'buildSize';
 export type TCheckId = Exclude<ModuleName, 'project-info'> | 'tests';
 export type TResultFact = number | string | boolean | null;
+export type TImportMapResult = ({ status: 'ok' } & ImportMapData) | ({ status: 'no-data' } & PluginProblem);
 
 export interface IResultIssue extends Issue {
   audit: string;
@@ -64,6 +66,7 @@ export interface IResultContext {
   modules: ResolvedConfig['modules'];
   thresholds: Thresholds;
   noData: readonly PluginNoData[];
+  importMap?: TImportMapResult;
 }
 
 export interface FrontisResult {
@@ -74,6 +77,7 @@ export interface FrontisResult {
   runAt: string;
   durationMs: number;
   score: Score;
+  importMap?: TImportMapResult;
   indicators: IResultIndicator[];
   recommendations: {
     importance: Importance;

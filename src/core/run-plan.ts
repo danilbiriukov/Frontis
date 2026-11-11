@@ -3,7 +3,8 @@ import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PluginReport } from '@code-pushup/models';
 import {
-  LCOV_FILES, TEST_RESULTS_FILE, fileStamp, type CoverageCommandState, type CoverageOptions, type TestCommandOptions,
+  LCOV_FILES, TEST_RESULTS_FILE, UNCONFIRMED_TEST_COMMAND, fileStamp,
+  type CoverageCommandState, type CoverageOptions, type TestCommandOptions,
 } from '../plugins/coverage-contract.js';
 import { JS_PACKAGES_PACKAGE, JS_PACKAGES_SLUG } from '../plugins/js-packages-contract.js';
 import { runGuardedPlugins, type GuardedPlugin } from './plugin-guard.js';
@@ -95,7 +96,14 @@ export async function runPlannedPlugins(plan: IEngineConfig, onProgress?: TPlugi
     ? { ...modules.coverage, slug: 'tests', module: testAdapter, options: { testCommand, stateFile } satisfies TestCommandOptions }
     : undefined;
   if (coverageTask !== undefined && stateFile !== undefined) {
-    coverageTask = { ...coverageTask, options: { reports: [], stateFile } satisfies CoverageOptions };
+    coverageTask = {
+      ...coverageTask,
+      options: { reports: [], stateFile } satisfies CoverageOptions,
+      preflight: async () => {
+        const state = await stat(stateFile).catch(() => undefined);
+        return state?.isFile() ? undefined : UNCONFIRMED_TEST_COMMAND;
+      },
+    };
     await writeFile(historyFile, JSON.stringify({ pending: true } satisfies LcovHistory));
   }
 

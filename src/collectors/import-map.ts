@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import type { Dirent } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { constants, type Dirent } from 'node:fs';
+import { open, readdir, readFile, realpath } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Collector, CollectorContext } from './index.js';
 
 export interface OutdatedPackage {
@@ -32,6 +32,17 @@ const SOURCE_EXTENSIONS = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i;
 const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage']);
 const SPECIFIER = /(?:\bfrom|\bimport|\brequire\s*\(|\bimport\s*\()\s*(['"`])([^'"`\n]+)\1/g;
 const GIT_TIMEOUT_MS = 10_000;
+
+const NO_SOURCES = {
+  status: 'no-data',
+  code: 'no-sources',
+  reason: 'В проекте нет доступных исходных файлов.',
+  action: 'Проверьте projectDir в frontis.config и доступ к файлам.',
+} as const;
+
+function skippedDirectory(name: string): boolean {
+  return name.startsWith('.') || SKIPPED_DIRS.has(name);
+}
 
 function parseVersion(version: string): number[] | undefined {
   // Поиск начинается только с первой цифры группы.
@@ -86,7 +97,9 @@ async function walkFiles(projectDir: string, signal?: AbortSignal): Promise<stri
     }
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (!entry.name.startsWith('.') && !SKIPPED_DIRS.has(entry.name)) await walk(join(dir, entry.name));
+        if (!skippedDirectory(entry.name)) {
+          await walk(join(dir, entry.name));
+        }
       } else if (entry.isFile()) {
         files.push(relative(projectDir, join(dir, entry.name)).split(sep).join('/'));
       }
@@ -98,14 +111,44 @@ async function walkFiles(projectDir: string, signal?: AbortSignal): Promise<stri
 
 export function findImports(source: string, names: readonly string[]): { name: string; line: number; specifier: string }[] {
   const found: { name: string; line: number; specifier: string }[] = [];
+  let line = 1;
+  let nextLine = source.indexOf('\n');
   for (const match of source.matchAll(SPECIFIER)) {
     const specifier = match[2];
     const name = names.find((candidate) => specifier === candidate || specifier.startsWith(`${candidate}/`));
-    if (name === undefined) continue;
-    const line = source.slice(0, match.index).split('\n').length;
+    if (name === undefined) {
+      continue;
+    }
+    while (nextLine !== -1 && nextLine < match.index) {
+      line += 1;
+      nextLine = source.indexOf('\n', nextLine + 1);
+    }
     found.push({ name, line, specifier });
   }
   return found;
+}
+
+async function readSource(projectDir: string, file: string, signal?: AbortSignal): Promise<string | undefined> {
+  const path = resolve(projectDir, file);
+  const within = relative(projectDir, path);
+  if (isAbsolute(file) || isAbsolute(within) || within === '..' || within.startsWith(`..${sep}`)) {
+    return;
+  }
+  try {
+    if (relative(path, await realpath(path)) !== '') {
+      return;
+    }
+    const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    try {
+      if ((await handle.stat()).isFile()) {
+        return await readFile(handle, { encoding: 'utf8', signal });
+      }
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    signal?.throwIfAborted();
+  }
 }
 
 export function createImportMapCollector(options: ImportMapOptions): Collector<ImportMapData> {
@@ -119,41 +162,43 @@ export function createImportMapCollector(options: ImportMapOptions): Collector<I
       };
     }
 
-    const listed = (await gitFiles(context)) ?? (await walkFiles(context.projectDir, context.signal));
-    context.signal?.throwIfAborted();
-    const sources = listed
-      .filter((file) => SOURCE_EXTENSIONS.test(file) && !file.split('/').some((part) => part === 'node_modules'))
-      .sort();
-    if (sources.length === 0) {
-      return {
-        status: 'no-data',
-        code: 'no-sources',
-        reason: 'В проекте не найдено исходных файлов',
-        action: 'Проверьте projectDir в frontis.config.',
-      };
+    const selected = selectMostOutdated(options.packages, options.limit);
+    if (selected.length === 0) {
+      return { status: 'ok', data: { packages: [], scannedFiles: 0 }, findings: [] };
     }
 
-    const selected = selectMostOutdated(options.packages, options.limit);
+    const { signal } = context;
+    const projectDir = await realpath(context.projectDir).catch(() => undefined);
+    if (projectDir === undefined) {
+      return NO_SOURCES;
+    }
+    const listed = (await gitFiles({ projectDir, signal })) ?? (await walkFiles(projectDir, signal));
+    signal?.throwIfAborted();
+    const sources = listed
+      .filter((file) => SOURCE_EXTENSIONS.test(file) && !file.split('/').slice(0, -1).some(skippedDirectory))
+      .sort();
     const names = selected.map(({ name }) => name);
     const imports = new Map<string, ImportMapData['packages'][number]['imports']>(names.map((name) => [name, []]));
-    if (names.length > 0) {
-      for (const file of sources) {
-        context.signal?.throwIfAborted();
-        let source: string;
-        try {
-          source = await readFile(join(context.projectDir, file), 'utf8');
-        } catch {
-          continue;
+    let scannedFiles = 0;
+    for (const file of sources) {
+      signal?.throwIfAborted();
+      const source = await readSource(projectDir, file, signal);
+      if (source !== undefined) {
+        scannedFiles += 1;
+        for (const { name, line, specifier } of findImports(source, names)) {
+          imports.get(name)?.push({ file, line, specifier });
         }
-        for (const { name, line, specifier } of findImports(source, names)) imports.get(name)?.push({ file, line, specifier });
       }
+    }
+    if (scannedFiles === 0) {
+      return NO_SOURCES;
     }
 
     return {
       status: 'ok',
       data: {
         packages: selected.map(({ name, current, latest }) => ({ name, current, latest, imports: imports.get(name) ?? [] })),
-        scannedFiles: sources.length,
+        scannedFiles,
       },
       findings: [],
     };

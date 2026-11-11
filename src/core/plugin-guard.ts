@@ -1,10 +1,10 @@
-import type { PluginConfig, PluginReport } from '@code-pushup/models';
+import { pluginReportSchema, type PluginConfig, type PluginReport } from '@code-pushup/models';
 import { execFile, fork, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-import { promisify } from 'node:util';
+import { inspect, promisify } from 'node:util';
 import type { CollectorFailure } from '../collectors/index.js';
 import type { ResolvedModuleConfig } from './config.js';
 import type { TPluginProgress } from './types/run.js';
@@ -14,6 +14,8 @@ export interface GuardedPlugin extends ResolvedModuleConfig {
   /** Имя npm-пакета или абсолютный file URL модуля с фабрикой. */
   module: string;
   options?: unknown;
+  /** Проверяет наличие данных от предыдущих плагинов перед запуском воркера. */
+  preflight?: () => Promise<PluginProblem | undefined>;
 }
 
 export type PluginProblem = Pick<CollectorFailure, 'code' | 'reason' | 'action'>;
@@ -31,10 +33,12 @@ export interface PluginRequest {
   temporaryGit: boolean;
 }
 
-export type PluginOutcome = ({ report: PluginReport } | {
+export type PluginOutcome = ({ report: PluginReport; declaredAudits: string[] } | {
   problem: PluginProblem;
   status: CollectorFailure['status'];
 }) & { diagnostic?: string };
+
+export const PLUGIN_RESULT_MESSAGE = 'frontis-plugin-result';
 
 export interface PluginNoData extends PluginProblem {
   plugin: string;
@@ -55,6 +59,63 @@ function failed(diagnostic: string): PluginOutcome {
     },
     diagnostic,
   };
+}
+
+export function invalidPluginResult(diagnostic: string): PluginOutcome {
+  return {
+    status: 'error',
+    problem: {
+      code: 'invalid-result',
+      reason: 'Результат плагина не соответствует контракту аудитов.',
+      action: 'Проверьте версию и настройки плагина.',
+    },
+    diagnostic,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readPluginReport(report: unknown, declaredAudits: unknown): PluginOutcome {
+  if (!Array.isArray(declaredAudits) || Array.from(declaredAudits).some((slug) => typeof slug !== 'string')) {
+    return invalidPluginResult('Итоговое сообщение не содержит идентификаторы объявленных аудитов.');
+  }
+  const parsed = pluginReportSchema.safeParse(report);
+  if (!parsed.success) {
+    return invalidPluginResult(inspect(parsed.error));
+  }
+  const expected = new Set(declaredAudits);
+  const returnedAudits = parsed.data.audits.map(({ slug }) => slug);
+  const returned = new Set(returnedAudits);
+  if (expected.size !== declaredAudits.length || returned.size !== returnedAudits.length ||
+      expected.size !== returned.size || declaredAudits.some((slug) => !returned.has(slug))) {
+    return invalidPluginResult([
+      'Объявленные и возвращённые аудиты должны совпадать, каждый идентификатор должен встречаться один раз.',
+      `Объявлены: ${declaredAudits.join(', ')}. Возвращены: ${returnedAudits.join(', ')}.`,
+    ].join('\n'));
+  }
+  return { report: parsed.data, declaredAudits };
+}
+
+function readPluginOutcome(message: unknown): PluginOutcome | undefined {
+  if (!isRecord(message) || message.type !== PLUGIN_RESULT_MESSAGE) {
+    return;
+  }
+  const { outcome } = message;
+  if (isRecord(outcome)) {
+    if ('report' in outcome && !('problem' in outcome)) {
+      return readPluginReport(outcome.report, outcome.declaredAudits);
+    }
+    const { problem, status, diagnostic } = outcome;
+    if (!('report' in outcome) && isRecord(problem) && typeof problem.code === 'string' &&
+        typeof problem.reason === 'string' && typeof problem.action === 'string' &&
+        (status === 'error' || status === 'no-data') &&
+        (diagnostic === undefined || typeof diagnostic === 'string')) {
+      return { problem: { code: problem.code, reason: problem.reason, action: problem.action }, status, diagnostic };
+    }
+  }
+  return invalidPluginResult('Некорректное итоговое сообщение процесса плагина.');
 }
 
 async function stopProcessTree(child: ChildProcess): Promise<string | undefined> {
@@ -125,16 +186,16 @@ async function runPlugin(
 
   let result: PluginOutcome | undefined;
   let processError: Error | undefined;
-  child.once('message', (message: PluginOutcome) => {
-    result = message;
+  child.on('message', (message: unknown) => {
+    result ??= readPluginOutcome(message);
   });
   const completion = new Promise<PluginOutcome>((complete) => {
     child.on('error', (error) => {
       processError = error;
     });
     child.once('close', (code, signal) => {
-      if (code === 0 && result !== undefined) {
-        complete(result);
+      if (code === 0) {
+        complete(result ?? invalidPluginResult('Процесс плагина завершился без итогового сообщения.'));
       } else {
         complete(failed(
           processError?.stack ?? `Процесс плагина завершился: ${signal ?? code ?? 'неизвестный код'}.`,
@@ -214,6 +275,12 @@ export async function runGuardedPlugins(
           reason: 'Плагин отключён в конфигурации.',
           action: 'Включите модуль, если нужна эта проверка.',
         });
+        onProgress?.(plugin.slug, 'no-data');
+        continue;
+      }
+      const problem = await plugin.preflight?.();
+      if (problem !== undefined) {
+        noData.push({ plugin: plugin.slug, ...problem });
         onProgress?.(plugin.slug, 'no-data');
         continue;
       }

@@ -5,6 +5,12 @@ export const LCOV_FILES = ['coverage/lcov.info', 'lcov.info'] as const;
 export const TEST_RESULTS_FILE = '.frontis/test-results.json';
 export const LCOV_DATE_AUDIT = 'frontis-lcov-date';
 
+export const UNCONFIRMED_TEST_COMMAND: PluginProblem = {
+  code: 'test-command-unconfirmed',
+  reason: 'Не удалось подтвердить завершение команды тестов.',
+  action: 'Проверьте диагностику прогона тестов.',
+};
+
 export interface CoverageOptions {
   reports: string[];
   testCommand?: string;

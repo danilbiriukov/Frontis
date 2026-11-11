@@ -1,12 +1,11 @@
 import { copyFile, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import coveragePlugin from '@code-pushup/coverage-plugin';
-import { parseLcovFiles } from '@code-pushup/coverage-plugin/src/lib/runner/lcov/lcov-runner.js';
-import { recordToStatFunctionMapper } from '@code-pushup/coverage-plugin/src/lib/runner/lcov/transform.js';
 import type { PluginConfig, RunnerFunction } from '@code-pushup/models';
 import { CollectorRunError } from '../collectors/code-pushup.js';
 import type { PluginProblem } from '../core/plugin-guard.js';
-import { LCOV_DATE_AUDIT, type CoverageCommandState, type CoverageOptions } from './coverage-contract.js';
+import {
+  LCOV_DATE_AUDIT, UNCONFIRMED_TEST_COMMAND, type CoverageCommandState, type CoverageOptions,
+} from './coverage-contract.js';
 
 const noLcov: PluginProblem = {
   code: 'no-lcov',
@@ -22,11 +21,7 @@ async function selectedReport(options: CoverageOptions): Promise<string | Plugin
   try {
     state = JSON.parse(await readFile(options.stateFile, 'utf8')) as CoverageCommandState;
   } catch {
-    return {
-      code: 'test-command-unconfirmed',
-      reason: 'Не удалось подтвердить завершение команды тестов.',
-      action: 'Проверьте диагностику прогона тестов.',
-    };
+    return UNCONFIRMED_TEST_COMMAND;
   }
   if ('problem' in state) {
     const status = state.problem.code === 'test-command-failed' ? 'error' : 'no-data';
@@ -47,6 +42,11 @@ export async function prepare(options: CoverageOptions, outputDir: string): Prom
       return noLcov;
     }
     await copyFile(report, snapshot);
+    const [{ default: coveragePlugin }, { parseLcovFiles }, { recordToStatFunctionMapper }] = await Promise.all([
+      import('@code-pushup/coverage-plugin'),
+      import('@code-pushup/coverage-plugin/src/lib/runner/lcov/lcov-runner.js'),
+      import('@code-pushup/coverage-plugin/src/lib/runner/lcov/transform.js'),
+    ]);
     const records = await parseLcovFiles([snapshot]);
     const coverageTypes = (['line', 'branch', 'function'] as const).filter((type) =>
       records.some((record) => recordToStatFunctionMapper[type](record).total > 0)

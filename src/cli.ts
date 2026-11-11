@@ -9,14 +9,19 @@ import { openReportFile } from './report/index.js';
 const HELP = `frontis: аудит фронтенд-проекта с результатами в JSON и HTML
 
 Использование:
-  frontis run [опции]  запустить проверки в текущей папке
-  frontis open        открыть сохранённый HTML-отчёт
+  frontis run [опции]  запустить проверки по frontis.config.{ts,mjs,js}
+  frontis open         открыть сохранённый HTML-отчёт (по умолчанию .frontis/report.html)
   frontis --help       показать эту справку
   frontis --version    показать версию
 
 Опции run:
   --open, -o           открыть HTML-отчёт в браузере после завершения
-  --fail-on plan|fix   вернуть код 1, если статус достиг указанного порога`;
+  --fail-on plan|fix   вернуть код 1, если статус достиг указанного порога
+
+Коды выхода:
+  0  результат записан или отчёт открыт
+  1  достигнут порог --fail-on, результат записан
+  2  нет пригодных аудитов или произошла ошибка команды`;
 
 const isHelp = (arg: string | undefined): boolean => arg === '-h' || arg === '--help';
 
