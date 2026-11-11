@@ -1,9 +1,10 @@
 import type { AuditReport, Report } from '@code-pushup/models';
 import semver from 'semver';
+import { createImportMapCollector, type OutdatedPackage } from '../collectors/import-map.js';
 import { LCOV_DATE_AUDIT } from '../plugins/coverage-contract.js';
 import { ESLINT_CHECKED_FILES, ESLINT_PARSE_ERRORS } from '../plugins/eslint-evidence.js';
 import { OUTDATED_EVIDENCE_AUDIT } from '../plugins/js-packages-contract.js';
-import type { ModuleName, Thresholds } from './config.js';
+import type { ModuleName, ResolvedModuleConfig, Thresholds } from './config.js';
 import type { Finding } from './importance.js';
 import type { PluginProblem } from './plugin-guard.js';
 import { buildRecommendations } from './recommendations.js';
@@ -27,6 +28,7 @@ import type {
   IResultIndicator,
   IResultIssue,
   TCheckId,
+  TImportMapResult,
   TIndicatorId,
   TResultFact,
 } from './types/result.js';
@@ -217,7 +219,7 @@ function outdatedGroup(
   };
 }
 
-function npmOutdated(report: Report): ICheckEvidence {
+function npmOutdated(report: Report): ICheckEvidence & { packages?: OutdatedPackage[] } {
   const plugin = 'js-packages';
   const audits = selectAudits(report, plugin, outdatedSlugs);
   const evidence = selectAudits(report, plugin, [OUTDATED_EVIDENCE_AUDIT])[0];
@@ -238,6 +240,18 @@ function npmOutdated(report: Report): ICheckEvidence {
     const production = outdatedGroup(audits, evidence, items, 'prod');
     const development = outdatedGroup(audits, evidence, items, 'dev');
     const hasVerifiedGroup = production.verified || development.verified;
+    const packages = new Map<string, OutdatedPackage>();
+    for (const item of items) {
+      const group = item.group === 'prod' ? production : development;
+      const { package: name, currentVersion: current, targetVersion: latest } = item;
+      if (item.group !== undefined && group.verified && name !== undefined &&
+          current !== undefined && latest !== undefined && semver.valid(current) !== null &&
+          semver.valid(latest) !== null && semver.gt(latest, current) && !packages.has(name)) {
+        packages.set(name, { name, current, latest });
+      }
+    }
+    const confirmedZero = [production, development].every(({ state, value, verified, invalid }) =>
+      !invalid && (state === 'empty' || (verified && value === 0)));
     let problem: PluginProblem | undefined;
     if (production.invalid || development.invalid) {
       problem = invalidAudit;
@@ -262,6 +276,7 @@ function npmOutdated(report: Report): ICheckEvidence {
       },
       findings,
       details: { issues: items },
+      packages: packages.size > 0 || confirmedZero ? [...packages.values()] : undefined,
       ...(hasVerifiedGroup ? { partial: problem } : { problem }),
     };
   }
@@ -284,6 +299,30 @@ function npmOutdated(report: Report): ICheckEvidence {
     details: { issues: items },
     problem,
   };
+}
+
+export async function createResultImportMap(
+  report: Report,
+  projectDir: string,
+  options: ResolvedModuleConfig,
+): Promise<TImportMapResult> {
+  const signal = AbortSignal.timeout(options.timeoutMs);
+  try {
+    const packages = options.enabled ? npmOutdated(report).packages : undefined;
+    const result = await createImportMapCollector({ packages })({ projectDir, signal });
+    if (result.status === 'ok') {
+      return { status: 'ok', ...result.data };
+    }
+    const { code, reason, action } = result;
+    return { status: 'no-data', code, reason, action };
+  } catch {
+    return {
+      status: 'no-data',
+      code: signal.aborted ? 'import-map-timeout' : 'import-map-failed',
+      reason: signal.aborted ? 'Время поиска импортов истекло.' : 'Не удалось построить карту импортов.',
+      action: 'Проверьте доступ к исходным файлам и лимит времени проверки зависимостей.',
+    };
+  }
 }
 
 function eslint(report: Report): ICheckEvidence {
@@ -574,6 +613,7 @@ export function createResult(report: Report, context: IResultContext): FrontisRe
     runAt: report.date,
     durationMs: report.duration,
     score: projectScore(indicators.map(({ status }) => status)),
+    ...(context.importMap === undefined ? {} : { importMap: context.importMap }),
     indicators,
     recommendations: buildRecommendations(findings).flatMap(({ module, importance, current, target, description }) => (
       module === 'project-info' ? [] : [{ importance, indicator: indicatorByModule[module], now: current, target, text: description }]

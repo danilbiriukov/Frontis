@@ -123,6 +123,7 @@ test('npm сохраняет официальные аудиты и считае
     dependencies: { 'lib-major': '^1.0.0', 'lib-current': '^1.0.0', 'lib-local': 'file:./local' },
     devDependencies: { 'dev-patch': '1.0.0' },
   });
+  await writeFile(join(dir, 'entry.js'), "import 'lib-major/subpath';\nimport 'dev-patch';\n");
   const output = await run(dir);
   assert.equal(output.code, 0, `${output.stdout}\n${output.stderr}`);
   const report = reportSchema.parse(await output.json('report.json'));
@@ -132,7 +133,8 @@ test('npm сохраняет официальные аудиты и считае
   assert.deepEqual(packages.audits.filter(({ slug }) => slug.startsWith('npm-outdated-')).map(({ slug, value }) => [slug, value]), [
     ['npm-outdated-prod', 1], ['npm-outdated-dev', 1],
   ]);
-  const { status, checks: [check] } = outdatedIndicator(await output.json('result.json'));
+  const result = await output.json('result.json');
+  const { status, checks: [check] } = outdatedIndicator(result);
   assert.equal(status, 'fix');
   assert.equal(check.facts.productionComparable, 2);
   assert.equal(check.facts.productionOutdatedPercent, 50);
@@ -143,6 +145,12 @@ test('npm сохраняет официальные аудиты и считае
   ), [
     ['lib-major', 'major', '1.0.0', '2.0.0'], ['dev-patch', 'patch', '1.0.0', '1.0.1'],
   ]);
+  assert.equal(result.importMap.status, 'ok');
+  assert.deepEqual(result.importMap.packages.map(({ name, imports }) => [name, imports]), [
+    ['lib-major', [{ file: 'entry.js', line: 1, specifier: 'lib-major/subpath' }]],
+    ['dev-patch', [{ file: 'entry.js', line: 2, specifier: 'dev-patch' }]],
+  ]);
+  assert.match(await readFile(join(dir, '.frontis/report.html'), 'utf8'), /<code>lib-major\/subpath<\/code>/);
   assert(requests.includes('lib-current'));
   assert(!requests.includes('lib-local'));
 });

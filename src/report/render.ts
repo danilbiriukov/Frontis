@@ -1,4 +1,5 @@
 import type { Report } from '@code-pushup/models';
+import { frontisVersion } from '../core/package-info.js';
 import type { PluginNoData } from '../core/plugin-guard.js';
 import type { FrontisResult, IResultCheck, IResultIndicator, IResultIssue } from '../core/types/result.js';
 import { escapeHtml } from './escape.js';
@@ -16,6 +17,7 @@ export interface GenerateReportOptions {
   result?: FrontisResult;
   report?: Report;
   noData?: readonly PluginNoData[];
+  runAt?: string;
   project?: {
     name?: string | null;
     version?: string | null;
@@ -261,8 +263,8 @@ function renderIssues(issues: IResultIssue[]): string {
       </tr>`;
   }).join('');
 
-  const limitNote = total > MAX_LIST_ITEMS
-    ? `<div class="limit-note">Показано ${MAX_LIST_ITEMS} из ${total} находок. Полный список сохранён в result.json</div>`
+  const limitNote = total >= MAX_LIST_ITEMS
+    ? `<div class="limit-note">${total > MAX_LIST_ITEMS ? `Показано ${MAX_LIST_ITEMS} из ${total} находок. ` : ''}Полный список аудитов и находок в report.json.</div>`
     : '';
 
   return `
@@ -370,7 +372,7 @@ function renderCheck(check: IResultCheck): string {
   const statusIcon = STATUS_ICONS[check.status] || '';
   const badgeClass = `badge-${check.status}`;
 
-  const reasonHtml = check.status === 'no-data' && check.reason
+  const reasonHtml = (check.status === 'no-data' || check.incomplete) && check.reason
     ? `<div class="callout callout-no-data">
         <div class="callout-title">${escapeHtml(check.reason)}</div>
         ${check.action ? `<div class="callout-action">${escapeHtml(check.action)}</div>` : ''}
@@ -442,10 +444,39 @@ function renderIndicators(indicators: IResultIndicator[]): string {
   </section>`;
 }
 
+function renderImportMap(map: FrontisResult['importMap']): string {
+  if (map === undefined) {
+    return '';
+  }
+  let content: string;
+  if (map.status === 'no-data') {
+    content = `<p><strong>${STATUS_LABELS['no-data']}</strong>. ${escapeHtml(map.reason)} ${escapeHtml(map.action)}</p>`;
+  } else if (map.packages.length === 0) {
+    content = '<p>Отстающих пакетов нет.</p>';
+  } else {
+    content = map.packages.map(({ name, current, latest, imports }) => {
+      const locations = imports.slice(0, MAX_LIST_ITEMS).map(({ file, line, specifier }) =>
+        `<li><code>${escapeHtml(file)}:${escapeHtml(line)}</code> <code>${escapeHtml(specifier)}</code></li>`,
+      ).join('');
+      const more = imports.length > MAX_LIST_ITEMS
+        ? `<p>Показано ${MAX_LIST_ITEMS} из ${imports.length}. Полный список в <code>result.json</code>.</p>`
+        : '';
+      return `<details>
+        <summary><code>${escapeHtml(name)}</code> ${escapeHtml(current)} → ${escapeHtml(latest)} (${imports.length})</summary>
+        <div class="details-content">${locations === '' ? '<p>Импорты не найдены.</p>' : `<ul>${locations}</ul>${more}`}</div>
+      </details>`;
+    }).join('');
+  }
+  return `<section class="section" id="import-map">
+    <h2 class="section-title">Места использования отстающих пакетов</h2>
+    ${content}
+  </section>`;
+}
+
 function renderDiagnosticReport(options: GenerateReportOptions): string {
-  const project = options.project || options.result?.project || {};
-  const toolVersion = options.result?.tool.version || '0.1.0';
-  const runAt = options.result?.runAt || new Date().toISOString();
+  const project = options.project ?? {};
+  const toolVersion = frontisVersion();
+  const runAt = options.runAt ?? new Date().toISOString();
   const noData = options.noData || [];
 
   const rows = noData.map((item) => `
@@ -528,6 +559,7 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
     ${renderRecommendations(result.recommendations)}
     ${renderNoDataTable(result.indicators)}
     ${renderIndicators(result.indicators)}
+    ${renderImportMap(result.importMap)}
   </div>
 </body>
 </html>`;

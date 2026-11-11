@@ -1,4 +1,4 @@
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, relative, resolve, sep } from 'node:path';
 import { ConfigError } from './errors.js';
 
 export const MODULE_NAMES = [
@@ -314,6 +314,14 @@ export function resolveConfig(raw: unknown, configPath?: string): ResolvedConfig
     thresholds: checkThresholds(checker.section(raw, 'thresholds'), checker),
     modules: checkModules(checker.section(raw, 'modules'), timeoutMs, checker),
   };
+
+  const outputDir = resolve(projectDir, FRONTIS_OUTPUT_DIR);
+  const pathInOutput = relative(outputDir, config.outFile).toLowerCase();
+  const [outputName] = pathInOutput.split(sep);
+  if (outputName === '' || ['report.json', 'result.json', 'no-data.json', 'test-results.json', 'coverage-command.json',
+    'run.lock', 'logs'].includes(outputName) || /^run-\d+\.lock$/.test(outputName)) {
+    checker.errors.push('outFile: выберите путь, свободный от служебных файлов Frontis.');
+  }
 
   if (checker.errors.length > 0) {
     throw new ConfigError(

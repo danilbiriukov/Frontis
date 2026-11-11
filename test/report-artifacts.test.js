@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -73,7 +74,28 @@ test('каталог артефактов принимает только оди
   });
   assert.equal(JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')).date, runAt);
   assert.equal(JSON.parse(await readFile(join(dir, 'result.json'), 'utf8')).runAt, runAt);
-  await assert.rejects(stat(join(dir, 'run.lock')), { code: 'ENOENT' });
+  await assert.rejects(stat(join(dir, `run-${process.pid}.lock`)), { code: 'ENOENT' });
+});
+
+test('проверка запускается после завершения владельца старой блокировки', async (t) => {
+  const dir = await outputDir(t);
+  const child = spawnSync(process.execPath, ['-e', ''], { windowsHide: true });
+  assert.equal(child.status, 0);
+  await writeFile(join(dir, 'run.lock'), `${child.pid}\n`);
+  await writeFile(join(dir, `run-${child.pid}.lock`), '');
+  assert.equal(await withCurrentRun(dir, async () => 0), 0);
+});
+
+test('проверка сохраняет файлы за пределами каталога артефактов, если .frontis является ссылкой', async (t) => {
+  const dir = await outputDir(t);
+  const target = join(dir, 'data');
+  await mkdir(target);
+  const original = join(target, 'report.json');
+  await writeFile(original, '{"original":true}');
+  const link = join(dir, '.frontis');
+  await symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(withCurrentRun(link, () => assert.fail('Запуск начался')), /обычный каталог/);
+  assert.equal(await readFile(original, 'utf8'), '{"original":true}');
 });
 
 test('сбой записи Report убирает частично опубликованный result.json', async (t) => {
@@ -84,5 +106,5 @@ test('сбой записи Report убирает частично опубли�
     await writeResultArtifacts(dir, report, { runAt });
   }));
   await assert.rejects(stat(join(dir, 'result.json')), { code: 'ENOENT' });
-  await assert.rejects(stat(join(dir, 'run.lock')), { code: 'ENOENT' });
+  await assert.rejects(stat(join(dir, `run-${process.pid}.lock`)), { code: 'ENOENT' });
 });
