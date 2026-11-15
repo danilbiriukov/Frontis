@@ -10,7 +10,8 @@
     "prepublishOnly": "node scripts/pack-release.mjs",
     "lint": "oxlint --deny-warnings",
     "test": "npm run build && node --test \"test/*.test.js\"",
-    "pack:release": "npm run build && node scripts/pack-release.mjs"
+    "pack:release": "npm run build && node scripts/pack-release.mjs",
+    "smoke:release": "node scripts/smoke-release.mjs"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

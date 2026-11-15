@@ -53,6 +53,7 @@ try {
   delete manifest.overrides;
   delete manifest.scripts.prepublishOnly;
   delete manifest.scripts['pack:release'];
+  delete manifest.scripts['smoke:release'];
   writeJson(join(staging, 'package.json'), manifest);
 
   npm('pack', '--ignore-scripts', '--loglevel=error', '--pack-destination', root);
