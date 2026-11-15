@@ -83,7 +83,7 @@ npm link
 
 После `npm link` команда `frontis` доступна локально. Для пересборки при изменениях запустите `npm run dev`.
 
-Проверки проекта запускаются командами `npm run lint` и `npm test`. CI проверяет Node.js 22 и 26 на Linux, Windows и macOS. [Версии Code PushUp и порядок обновления](docs/frontis-plugins.md#обновление-code-pushup)
+Проверки проекта запускаются командами `npm run lint` и `npm test`. CI проверяет Node.js 22 и 26 на Linux, Windows и macOS, а Node.js 24 на Linux. [Версии Code PushUp и порядок обновления](docs/frontis-plugins.md#обновление-code-pushup)
 
 ## Структура
 
