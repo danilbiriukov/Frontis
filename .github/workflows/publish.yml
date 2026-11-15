@@ -73,8 +73,37 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  publish:
+  smoke:
+    name: Проверка архива (${{ matrix.os }}, Node.js 22)
     needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frontis-release
+
+      - name: Проверить установку и первый отчёт
+        shell: bash
+        env:
+          ARCHIVE: ${{ needs.prepare.outputs.archive }}
+        run: npm run smoke:release -- "./$ARCHIVE"
+
+  publish:
+    needs: [prepare, smoke]
     runs-on: ubuntu-latest
     environment: npm
     permissions:
