@@ -112,6 +112,32 @@ test('ESLint и Prettier показывают свои находки в отд�
   assert.doesNotMatch(card, /src\/(demo|format-me)\.js/);
 });
 
+test('зависимости, покрытие и тесты показывают находки своих проверок отдельно', () => {
+  const result = structuredClone(fixtureResult);
+  for (const [id, pkg] of [['outdated', 'old-package'], ['audit', 'vulnerable-package']]) {
+    const indicator = result.indicators.find((item) => item.id === id);
+    const check = indicator.checks[0];
+    indicator.status = check.status = 'fix';
+    check.details = { issues: [{ audit: id, severity: 'error', message: 'Обновите пакет', package: pkg }] };
+  }
+  const coverage = result.indicators.find(({ id }) => id === 'coverage');
+  const tests = coverage.checks.find(({ id }) => id === 'tests');
+  tests.status = 'fix';
+  tests.facts = { passed: 8, failed: 1 };
+  coverage.findings.push({ kind: 'tests.failed', importance: 'high', now: '1', target: '0' });
+
+  const html = generateHtmlReport({ result });
+  const section = (id) => html.match(new RegExp(`<section class="section" id="${id}"[\\s\\S]*?</section>`))?.[0];
+  for (const [id, pkg] of [['outdated-findings', 'old-package'], ['audit-findings', 'vulnerable-package']]) {
+    assert.ok(section(id)?.includes(`<td class="code-path">${pkg}</td>`));
+    assert.ok(html.includes(`href="#${id}"`));
+  }
+  assert.match(section('coverage-findings'), /Покрытие строк[\s\S]*90%/);
+  assert.doesNotMatch(section('coverage-findings'), /Тесты с ошибкой/);
+  assert.match(section('test-findings'), /Тестов пройдено[\s\S]*Тесты с ошибкой/);
+  assert.doesNotMatch(section('test-findings'), /Покрытие строк/);
+});
+
 test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {
   const result = structuredClone(fixtureResult);
   const coverage = result.indicators.find(({ id }) => id === 'coverage');

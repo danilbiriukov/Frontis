@@ -262,7 +262,7 @@ function renderNoDataTable(indicators: IResultIndicator[]): string {
   </section>`;
 }
 
-function renderIssues(issues: IResultIssue[], sectionTitle?: string): string {
+function renderIssues(issues: IResultIssue[], sectionTitle?: string, reference: 'file' | 'package' = 'file'): string {
   if (issues.length === 0) {
     return '';
   }
@@ -273,11 +273,11 @@ function renderIssues(issues: IResultIssue[], sectionTitle?: string): string {
     const sev = issue.severity || 'info';
     const sourceFile = issue.source && 'file' in issue.source ? issue.source.file : undefined;
     const line = issue.source && 'position' in issue.source && issue.source.position ? `:${issue.source.position.startLine}` : '';
-    const file = sourceFile ? `${sourceFile}${line}` : '—';
+    const location = reference === 'package' ? issue.package : sourceFile ? `${sourceFile}${line}` : undefined;
     return `
       <tr>
         <td><span class="badge badge-${sev === 'error' ? 'fix' : sev === 'warning' ? 'plan' : 'no-data'}">${sev === 'error' ? 'Ошибка' : sev === 'warning' ? 'Предупреждение' : 'Сведения'}</span></td>
-        <td class="code-path">${escapeHtml(file)}</td>
+        <td class="code-path">${escapeHtml(location ?? '—')}</td>
         <td>${escapeHtml(issue.message)}</td>
       </tr>`;
   }).join('');
@@ -292,7 +292,7 @@ function renderIssues(issues: IResultIssue[], sectionTitle?: string): string {
           <thead>
             <tr>
               <th scope="col">Уровень</th>
-              <th scope="col">Файл</th>
+              <th scope="col">${reference === 'package' ? 'Пакет' : 'Файл'}</th>
               <th scope="col">Сообщение</th>
             </tr>
           </thead>
@@ -410,6 +410,13 @@ function renderMetrics(facts: readonly Fact[], tiles = false): string {
   ).join('')}</dl>`;
 }
 
+function testFacts(facts?: IResultCheck['facts']): Fact[] {
+  return [
+    ['Тестов пройдено', asNumber(facts?.passed)], ['Тестов с ошибкой', asNumber(facts?.failed)],
+    ['Тестов пропущено', asNumber(facts?.skipped)], ['Файлов тестов с ошибкой', asNumber(facts?.failedSuites)],
+  ];
+}
+
 function indicatorMetrics(indicator: IResultIndicator): {
   value?: string | number;
   tiles?: Fact[];
@@ -439,7 +446,6 @@ function indicatorMetrics(indicator: IResultIndicator): {
       };
     case 'coverage': {
       const lines = n('lines');
-      const tests = check('tests')?.facts;
       return {
         value: formatPercent(lines),
         tiles: [['Ветви', formatPercent(n('branches'))], ['Функции', formatPercent(n('functions'))]],
@@ -447,8 +453,7 @@ function indicatorMetrics(indicator: IResultIndicator): {
           warn: n('warn'), target: n('target'), status: primary?.status,
         }),
         rows: [
-          ['Тестов пройдено', asNumber(tests?.passed)], ['Тестов с ошибкой', asNumber(tests?.failed)],
-          ['Тестов пропущено', asNumber(tests?.skipped)], ['Файлов тестов с ошибкой', asNumber(tests?.failedSuites)],
+          ...testFacts(check('tests')?.facts),
           ['LCOV обновлён', typeof first.reportDate === 'string' ? formatDateTime(first.reportDate) : undefined],
         ],
       };
@@ -495,8 +500,12 @@ function renderStatus(status: IResultCheck['status']): string {
 }
 
 const findingsSectionIds: Partial<Record<IResultCheck['id'], string>> = {
+  outdated: 'outdated-findings',
+  audit: 'audit-findings',
   lint: 'eslint-findings',
   prettier: 'prettier-findings',
+  coverage: 'coverage-findings',
+  tests: 'test-findings',
 };
 
 function renderCheckProblem({ id, status, reason, action, code, logFile, incomplete }: IResultCheck): string {
@@ -519,8 +528,8 @@ function renderCheck(check: IResultCheck, showStatus: boolean, showFindingsSecti
     details?.largestFiles ? renderLargestFiles(details.largestFiles) : '',
     sectionId === undefined && details?.rules ? renderRules(details.rules) : '',
   ].join('');
-  const link = sectionId && (details?.issues?.length || details?.rules?.length)
-    ? `<p><a href="#${sectionId}">Находки ${escapeHtml(checkSources[id])}</a></p>`
+  const link = sectionId
+    ? `<p><a href="#${sectionId}">Подробности (${escapeHtml(checkSources[id])})</a></p>`
     : '';
   if (!showStatus && body === '' && detail === '' && link === '') {
     return '';
@@ -531,17 +540,56 @@ function renderCheck(check: IResultCheck, showStatus: boolean, showFindingsSecti
   return `<div class="check-item">${heading}${body}${detail}${link}</div>`;
 }
 
-function renderCodeQualityFindings(result: FrontisResult): string {
-  const checks = result.indicators.find(({ id }) => id === 'codeQuality')?.checks ?? [];
-  return (['lint', 'prettier'] as const).map((id) => {
-    const check = checks.find((item) => item.id === id);
-    if (check === undefined) {
+function renderCoverageFacts(check: IResultCheck): string {
+  if (check.id === 'tests') {
+    return renderMetrics(testFacts(check.facts), true);
+  }
+  if (check.id === 'coverage') {
+    return renderMetrics([
+      ['Покрытие строк', formatPercent(asNumber(check.facts.lines))],
+      ['Покрытие ветвей', formatPercent(asNumber(check.facts.branches))],
+      ['Покрытие функций', formatPercent(asNumber(check.facts.functions))],
+    ], true);
+  }
+  return '';
+}
+
+function renderCoverageFindings(check: IResultCheck, indicator: IResultIndicator): string {
+  if (check.id !== 'coverage' && check.id !== 'tests') {
+    return '';
+  }
+  const findings = indicator.findings.filter(({ kind }) => kind.startsWith(`${check.id}.`));
+  if (findings.length === 0) {
+    return '';
+  }
+  const rows = findings.map(({ kind, importance, now, target }) => `
+    <tr>
+      <td><span class="badge badge-importance-${escapeHtml(importance)}">${escapeHtml(IMPORTANCE_LABELS[importance])}</span></td>
+      <td><strong>${escapeHtml(recommendationTitles[kind] ?? CHECK_TITLES[check.id])}</strong></td>
+      <td class="cell-now"><code>${escapeHtml(now)}</code></td>
+      <td class="cell-target"><code>${escapeHtml(target)}</code></td>
+    </tr>`).join('');
+  return `<div class="table-wrapper" role="region" aria-label="Отклонения: ${escapeHtml(CHECK_TITLES[check.id])}" tabindex="0">
+    <table class="summary-table">
+      <thead><tr><th scope="col">Важность</th><th scope="col">Показатель</th><th scope="col" class="column-number">Сейчас</th><th scope="col" class="column-number">Цель</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderFindingsSections({ indicators }: FrontisResult): string {
+  return indicators.flatMap((indicator) => indicator.checks.map((check) => {
+    const { id } = check;
+    const sectionId = findingsSectionIds[id];
+    if (sectionId === undefined) {
       return '';
     }
-    const sectionId = findingsSectionIds[id];
     const title = CHECK_TITLES[id];
     const problem = renderCheckProblem(check);
-    const findings = renderIssues(check.details?.issues ?? [], title);
+    const isDependencyCheck = id === 'audit' || id === 'outdated';
+    const issues = renderIssues(check.details?.issues ?? [], title, isDependencyCheck ? 'package' : 'file');
+    const metrics = renderCoverageFacts(check);
+    const findings = renderCoverageFindings(check, indicator);
     const rules = renderRules(check.details?.rules ?? []);
     const empty = check.status === 'no-data' || check.status === 'disabled' ? 'Данные о находках недоступны.' : 'Находок нет.';
     return `<section class="section" id="${sectionId}" aria-labelledby="${sectionId}-title">
@@ -551,11 +599,14 @@ function renderCodeQualityFindings(result: FrontisResult): string {
       </div>
       <div class="findings-body">
         ${problem}
-        ${findings || (problem === '' ? `<p class="empty-state">${empty}</p>` : '')}
+        ${metrics}
+        ${findings}
+        ${issues}
+        ${findings === '' && issues === '' && problem === '' ? `<p class="empty-state">${empty}</p>` : ''}
         ${rules}
       </div>
     </section>`;
-  }).join('');
+  })).join('');
 }
 
 function renderIndicators(indicators: readonly IResultIndicator[], options: GenerateReportOptions): string {
@@ -721,7 +772,7 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
       ${renderScoreAndCounters(score, indicators)}
       ${result ? renderRecommendations(result) + renderNoDataTable(result.indicators) : renderDiagnostics(noData)}
       ${renderIndicators(indicators, options)}
-      ${result ? renderCodeQualityFindings(result) : ''}
+      ${result ? renderFindingsSections(result) : ''}
       ${renderImportMap(result?.importMap)}
     </main>
     ${renderFooter(version, engineVersion, duration)}
