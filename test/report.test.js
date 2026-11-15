@@ -107,8 +107,17 @@ test('ESLint и Prettier показывают свои находки в отд�
   assert.doesNotMatch(eslint, /src\/format-me\.js/);
   assert.match(prettier, /Форматирование \(Prettier\)[\s\S]*src\/format-me\.js/);
   assert.doesNotMatch(prettier, /src\/demo\.js/);
-  assert.match(card, /class="details-link" href="#eslint-findings">Подробности \(ESLint\)/);
-  assert.match(card, /class="details-link" href="#prettier-findings">Подробности \(Prettier\)/);
+  const footer = card.match(/<footer class="card-footer card-actions">([\s\S]*?)<\/footer>/)[1];
+  assert.match(footer, /class="details-link" href="#eslint-findings">Подробности \(ESLint\)/);
+  assert.match(footer, /class="details-link" href="#prettier-findings">Подробности \(Prettier\)/);
+  assert.doesNotMatch(footer, /<code>|<span>/);
+  for (const section of [eslint, prettier]) {
+    assert.match(section, /class="tool-description"/);
+    assert.match(section, /class="summary-table findings-table"/);
+    assert.match(section, /class="badge issue-icon[^"]*" role="img"/);
+    const heading = section.split('<div class="findings-body">')[0];
+    assert.doesNotMatch(heading, /class="badge/);
+  }
   assert.doesNotMatch(card, /class="check-header"|Линтер \(ESLint\)|Форматирование \(Prettier\)/);
   assert.doesNotMatch(card, /src\/(demo|format-me)\.js/);
 });
@@ -132,6 +141,7 @@ test('зависимости, покрытие и тесты показываю�
   for (const [id, pkg] of [['outdated-findings', 'old-package'], ['audit-findings', 'vulnerable-package']]) {
     assert.ok(section(id)?.includes(`<td class="code-path">${pkg}</td>`));
     assert.ok(html.includes(`href="#${id}"`));
+    assert.match(section(id), /class="tool-description"/);
   }
   assert.match(section('coverage-findings'), /Покрытие строк[\s\S]*90%/);
   assert.doesNotMatch(section('coverage-findings'), /Тесты с ошибкой/);
@@ -157,11 +167,9 @@ test('шкала LCOV следует статусу покрытия, а вре�
   assert.match(coverageCard, /meter-target" style="left:90%"/);
   assert.match(coverageCard, /Порог 65%/);
   assert.match(coverageCard, /Цель 90%/);
-  assert.match(coverageCard, /class="details-link" href="#coverage-findings">Подробности \(LCOV\)/);
-  assert.match(coverageCard, /class="details-link" href="#test-findings">Подробности \(Jest \/ Vitest\)/);
-  assert.doesNotMatch(coverageCard, /class="check-header"|Покрытие кода \(LCOV\)|Итоги тестов \(Jest \/ Vitest\)/);
+  assert.doesNotMatch(coverageCard, /class="details-link"|Покрытие кода \(LCOV\)|Итоги тестов \(Jest \/ Vitest\)/);
   assert.match(coverageCard, /Jest \/ Vitest, LCOV<\/code><span>1 с/);
-  assert.match(html, /<code>npm audit<\/code><\/footer>/);
+  assert.match(html, /<footer class="card-footer card-actions"><a class="details-link" href="#audit-findings">Подробности \(npm audit\)<\/a><\/footer>/);
 });
 
 test('generateHtmlReport экранирует XSS-нагрузки в сообщениях и путях', () => {

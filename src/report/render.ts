@@ -95,8 +95,12 @@ const statusNotes = {
 } as const;
 const statusOrder = ['fix', 'plan', 'ok', 'no-data'] as const;
 
+function renderIcon(paths: string): string {
+  return `<svg class="status-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
 function renderStatusIcon(status: IResultCheck['status']): string {
-  return `<svg class="status-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${STATUS_ICONS[status]}</svg>`;
+  return renderIcon(STATUS_ICONS[status]);
 }
 
 function renderMeter(
@@ -262,6 +266,12 @@ function renderNoDataTable(indicators: IResultIndicator[]): string {
   </section>`;
 }
 
+const issueLevels = {
+  error: { label: 'Ошибка', tone: 'fix', icon: STATUS_ICONS.fix },
+  warning: { label: 'Предупреждение', tone: 'plan', icon: STATUS_ICONS.plan },
+  info: { label: 'Сведения', tone: 'no-data', icon: '<circle cx="8" cy="8" r="5.6"/><path d="M8 7.5V11m0-6V5.2"/>' },
+} as const;
+
 function renderIssues(issues: IResultIssue[], sectionTitle?: string, reference: 'file' | 'package' = 'file'): string {
   if (issues.length === 0) {
     return '';
@@ -270,13 +280,13 @@ function renderIssues(issues: IResultIssue[], sectionTitle?: string, reference: 
   const sliced = issues.slice(0, MAX_LIST_ITEMS);
 
   const rows = sliced.map((issue) => {
-    const sev = issue.severity || 'info';
+    const level = issueLevels[issue.severity ?? 'info'] ?? issueLevels.info;
     const sourceFile = issue.source && 'file' in issue.source ? issue.source.file : undefined;
     const line = issue.source && 'position' in issue.source && issue.source.position ? `:${issue.source.position.startLine}` : '';
     const location = reference === 'package' ? issue.package : sourceFile ? `${sourceFile}${line}` : undefined;
     return `
       <tr>
-        <td><span class="badge badge-${sev === 'error' ? 'fix' : sev === 'warning' ? 'plan' : 'no-data'}">${sev === 'error' ? 'Ошибка' : sev === 'warning' ? 'Предупреждение' : 'Сведения'}</span></td>
+        <td class="issue-level"><span class="badge issue-icon badge-${level.tone}" role="img" aria-label="${level.label}" title="${level.label}">${renderIcon(level.icon)}</span></td>
         <td class="code-path">${escapeHtml(location ?? '—')}</td>
         <td>${escapeHtml(issue.message)}</td>
       </tr>`;
@@ -288,10 +298,11 @@ function renderIssues(issues: IResultIssue[], sectionTitle?: string, reference: 
 
   const table = `
       <div class="table-wrapper"${sectionTitle ? ` role="region" aria-label="Находки: ${escapeHtml(sectionTitle)}" tabindex="0"` : ''}>
-        <table${sectionTitle ? ' class="summary-table"' : ''}>
+        <table${sectionTitle ? ' class="summary-table findings-table"' : ''}>
+          ${sectionTitle ? '<colgroup><col class="finding-level-column"><col class="finding-location-column"><col></colgroup>' : ''}
           <thead>
             <tr>
-              <th scope="col">Уровень</th>
+              <th scope="col" class="issue-level">Уровень</th>
               <th scope="col">${reference === 'package' ? 'Пакет' : 'Файл'}</th>
               <th scope="col">Сообщение</th>
             </tr>
@@ -314,35 +325,11 @@ function renderLargestFiles(files: { file: string; bytes: number }[]): string {
   if (files.length === 0) {
     return '';
   }
-  const total = files.length;
-  const sliced = files.slice(0, MAX_LIST_ITEMS);
-
-  const rows = sliced.map((f) => `
-    <tr>
-      <td class="code-path">${escapeHtml(f.file)}</td>
-      <td class="file-size">${escapeHtml(formatBytes(f.bytes))}</td>
-    </tr>
-  `).join('');
-
-  return `
-  <details class="largest-files">
-    <summary class="details-link">Крупнейшие файлы (${total})</summary>
-    <div class="details-content">
-      <div class="table-wrapper" role="region" aria-label="Крупнейшие файлы сборки" tabindex="0">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Файл</th>
-              <th scope="col" class="file-size">Размер</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </details>`;
+  const facts: Fact[] = files.slice(0, MAX_LIST_ITEMS).map(({ file, bytes }) => [file, formatBytes(bytes)]);
+  return `<div class="largest-files">
+    <h4 class="largest-files-title">Крупнейшие файлы (${facts.length})</h4>
+    ${renderMetrics(facts)}
+  </div>`;
 }
 
 function renderRules(rules: { rule: string; count: number }[]): string {
@@ -487,11 +474,9 @@ function indicatorMetrics(indicator: IResultIndicator): {
     case 'buildSize': {
       const size = n('sizeBytes');
       const limit = n('limitBytes');
-      const largest = check('build-size')?.details?.largestFiles?.[0];
       return {
         value: size === undefined ? undefined : formatBytes(size),
-        rows: [['Файлов в сборке', n('files')], ['Самый большой', largest ? `${largest.file}, ${formatBytes(largest.bytes)}` : undefined],
-          ['Предел из конфига', limit === undefined ? undefined : formatBytes(limit)]],
+        rows: [['Файлов в сборке', n('files')], ['Предел из конфига', limit === undefined ? undefined : formatBytes(limit)]],
       };
     }
   }
@@ -509,7 +494,21 @@ const findingsSectionIds: Partial<Record<IResultCheck['id'], string>> = {
   coverage: 'coverage-findings',
   tests: 'test-findings',
 };
-const detailsOnlyInCards = new Set<IResultCheck['id']>(['coverage', 'tests', 'lint', 'prettier']);
+const checkDescriptions: Partial<Record<IResultCheck['id'], string>> = {
+  outdated: 'npm outdated сравнивает установленные версии зависимостей с версиями в реестре npm.',
+  audit: 'npm audit ищет известные уязвимости в прямых и транзитивных зависимостях.',
+  lint: 'ESLint проверяет исходный код по правилам проекта и сообщает об ошибках и предупреждениях.',
+  prettier: 'Prettier проверяет, какие файлы отличаются от формата, заданного в проекте.',
+};
+const checksWithOwnSections = new Set<IResultCheck['id']>(['coverage', 'tests', 'lint', 'prettier']);
+
+function renderDetailsLink(id: IResultCheck['id']): string {
+  const sectionId = findingsSectionIds[id];
+  if (sectionId === undefined || checkDescriptions[id] === undefined) {
+    return '';
+  }
+  return `<a class="details-link" href="#${sectionId}">Подробности (${escapeHtml(checkSources[id])})</a>`;
+}
 
 function renderCheckProblem({ id, status, reason, action, code, logFile, incomplete }: IResultCheck): string {
   const showReason = (status === 'no-data' || status === 'disabled' || incomplete) && reason;
@@ -522,28 +521,22 @@ function renderCheckProblem({ id, status, reason, action, code, logFile, incompl
   return `<div class="callout"><p class="callout-title">${escapeHtml(reason)}</p>${action ? `<p class="callout-action">${escapeHtml(action)}</p>` : ''}</div>${diagnosis}`;
 }
 
-function renderCheck(check: IResultCheck, showStatus: boolean): string {
-  const { id, status, details } = check;
-  const sectionId = findingsSectionIds[id];
-  const link = sectionId
-    ? `<a class="details-link" href="#${sectionId}">Подробности (${escapeHtml(checkSources[id])})</a>`
-    : '';
-  if (detailsOnlyInCards.has(id)) {
-    return link;
+function renderCheck(check: IResultCheck): string {
+  const { id, details } = check;
+  if (checksWithOwnSections.has(id)) {
+    return '';
   }
+  const sectionId = findingsSectionIds[id];
   const body = renderCheckProblem(check);
   const detail = [
     sectionId === undefined && details?.issues ? renderIssues(details.issues) : '',
     details?.largestFiles ? renderLargestFiles(details.largestFiles) : '',
     sectionId === undefined && details?.rules ? renderRules(details.rules) : '',
   ].join('');
-  if (!showStatus && body === '' && detail === '' && link === '') {
+  if (body === '' && detail === '') {
     return '';
   }
-  const heading = showStatus
-    ? `<div class="check-header"><span class="check-title">${escapeHtml(CHECK_TITLES[id])}</span>${renderStatus(status)}</div>`
-    : '';
-  return `<div class="check-item">${heading}${body}${detail}${link}</div>`;
+  return `<div class="check-item">${body}${detail}</div>`;
 }
 
 function renderCoverageFacts(check: IResultCheck): string {
@@ -590,6 +583,7 @@ function renderFindingsSection(indicator: IResultIndicator, check: IResultCheck)
     return '';
   }
   const title = CHECK_TITLES[id];
+  const description = checkDescriptions[id];
   const problem = renderCheckProblem(check);
   const isDependencyCheck = id === 'audit' || id === 'outdated';
   const issues = renderIssues(check.details?.issues ?? [], title, isDependencyCheck ? 'package' : 'file');
@@ -599,8 +593,11 @@ function renderFindingsSection(indicator: IResultIndicator, check: IResultCheck)
   const empty = check.status === 'no-data' || check.status === 'disabled' ? 'Данные о находках недоступны.' : 'Находок нет.';
   return `<section class="section" id="${sectionId}" aria-labelledby="${sectionId}-title">
     <div class="section-heading">
-      <h2 class="section-title" id="${sectionId}-title">${escapeHtml(title)}</h2>
-      ${renderStatus(check.status)}
+      <div>
+        <h2 class="section-title" id="${sectionId}-title">${escapeHtml(title)}</h2>
+        ${description === undefined ? '' : `<p class="tool-description">${escapeHtml(description)}</p>`}
+      </div>
+      ${description === undefined ? renderStatus(check.status) : ''}
     </div>
     <div class="findings-body">
       ${problem}
@@ -614,13 +611,9 @@ function renderFindingsSection(indicator: IResultIndicator, check: IResultCheck)
 }
 
 function renderFindingsSections(indicators: readonly IResultIndicator[]): string {
-  return indicators.map((indicator) => {
-    const sections = indicator.checks.map((check) => renderFindingsSection(indicator, check)).join('');
-    if (indicator.id === 'coverage' && sections !== '') {
-      return `<div class="coverage-findings-grid">${sections}</div>`;
-    }
-    return sections;
-  }).join('');
+  return indicators.filter(({ id }) => id !== 'coverage')
+    .flatMap((indicator) => indicator.checks.map((check) => renderFindingsSection(indicator, check)))
+    .join('');
 }
 
 function renderIndicators(indicators: readonly IResultIndicator[], options: GenerateReportOptions): string {
@@ -638,7 +631,8 @@ function renderIndicators(indicators: readonly IResultIndicator[], options: Gene
     const duration = sumKnown(...active.map((check) => options.durations?.get(check.id)));
     const sources = active.map((check) => check.id === 'build-size' ? options.buildDir ?? checkSources[check.id] : checkSources[check.id]);
     const elapsed = formatDuration(duration);
-    const checksHtml = checks.map((check) => renderCheck(check, checks.length > 1)).join('');
+    const checksHtml = checks.map(renderCheck).join('');
+    const detailsLinks = checks.map(({ id: checkId }) => renderDetailsLink(checkId)).join('');
     const fallback = status === 'no-data' && checksHtml === '' && indicator.reason
       ? `<div class="callout"><p>${escapeHtml(indicator.reason)}</p><p class="callout-action">${escapeHtml(indicator.action)}</p></div>`
       : '';
@@ -656,13 +650,17 @@ function renderIndicators(indicators: readonly IResultIndicator[], options: Gene
         ${fallback}
         ${checksHtml === '' ? '' : `<div class="checks-list">${checksHtml}</div>`}
       </div>
-      <footer class="card-footer">${sources.length > 0 ? `<code>${escapeHtml(sources.join(', '))}</code>` : '<span>Проверки не запущены</span>'}${elapsed ? `<span>${escapeHtml(elapsed)}</span>` : ''}</footer>
+      ${detailsLinks ? `<footer class="card-footer card-actions">${detailsLinks}</footer>` :
+        `<footer class="card-footer">${sources.length > 0 ? `<code>${escapeHtml(sources.join(', '))}</code>` : '<span>Проверки не запущены</span>'}${elapsed ? `<span>${escapeHtml(elapsed)}</span>` : ''}</footer>`}
     </article>`];
   }).join('');
 
+  const coverage = indicators.find(({ id }) => id === 'coverage');
+  const coverageSections = coverage === undefined ? '' : coverage.checks.map((check) => renderFindingsSection(coverage, check)).join('');
   return `<section class="instrument-section" id="indicators">
     <div class="section-heading"><h2 class="section-title">Инструменты</h2></div>
     <div class="indicators-list">${cards}</div>
+    ${coverageSections ? `<div class="coverage-findings-grid">${coverageSections}</div>` : ''}
   </section>`;
 }
 
