@@ -78,12 +78,11 @@ function renderHeader(project: NonNullable<GenerateReportOptions['project']>, ru
   return `
   <header class="report-header">
     <h1>Техническое здоровье проекта</h1>
-    <p class="report-intro">Frontis собрал отчёт локально. Для просмотра отчёта сеть не нужна.</p>
     <dl class="header-meta">
       <div class="meta-item"><dt>Проект</dt><dd class="meta-value">${escapeHtml(name)}${version}</dd></div>
-      ${branch}
-      <div class="meta-item"><dt>Коммит</dt><dd class="meta-value">${commit}</dd></div>
       <div class="meta-item"><dt>Запуск</dt><dd class="meta-value"><time datetime="${escapeHtml(runAt)}">${escapeHtml(formatDateTime(runAt))}</time></dd></div>
+      <div class="meta-item"><dt>Коммит</dt><dd class="meta-value">${commit}</dd></div>
+      ${branch}
     </dl>
   </header>`;
 }
@@ -648,6 +647,7 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="only light">
   <title>Frontis: ${escapeHtml(title)}</title>
   <style>${REPORT_STYLES}</style>
 </head>

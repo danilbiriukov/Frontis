@@ -1,6 +1,6 @@
 export const REPORT_STYLES = `
 :root {
-  color-scheme: light dark;
+  color-scheme: only light;
   --bg: #f5f5f2;
   --surface: #fff;
   --muted: #fafaf8;
@@ -26,32 +26,6 @@ export const REPORT_STYLES = `
   --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #191a19;
-    --surface: #222422;
-    --muted: #282b28;
-    --border: #41453f;
-    --line: #363a35;
-    --ink: #f1f2ed;
-    --secondary: #b4bbb3;
-    --body: #d1d5ce;
-    --table-head: #2d302d;
-    --track: #383d37;
-    --marker: #a7ada5;
-    --link: #a8c3ff;
-    --ok: #9dd6b4;
-    --ok-bg: #263c30;
-    --ok-line: #3b5d48;
-    --plan: #f3ce75;
-    --plan-bg: #3d3422;
-    --plan-line: #685534;
-    --fix: #f3aaa4;
-    --fix-bg: #402a2a;
-    --fix-line: #674341;
-  }
-}
-
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
 h1, h2, h3, p, dl, dd { margin: 0; }
@@ -61,9 +35,8 @@ a { color: var(--link); text-underline-offset: .2em; }
 .container { width: min(1180px, calc(100% - 48px)); margin-inline: auto; padding-block: 36px 52px; }
 .report-header { margin-bottom: 24px; }
 h1 { font-size: clamp(25px, 5vw, 32px); line-height: 1.16; font-weight: 680; }
-.report-intro { margin-top: 8px; color: var(--secondary); }
 .diagnostic-notice { color: var(--secondary); margin-bottom: 14px; }
-.header-meta { margin-top: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: 4px 36px; }
+.header-meta { margin-top: 18px; display: grid; gap: 4px; }
 .meta-item { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; font-size: 13px; }
 .meta-item dt, .section-note, .score-coverage, .score-zone { color: var(--secondary); }
 .meta-value { min-width: 0; overflow-wrap: anywhere; }
@@ -164,7 +137,6 @@ summary { cursor: pointer; overflow-wrap: anywhere; color: var(--link); min-heig
 @media (max-width: 580px) {
   .container { width: calc(100% - 28px); padding-block: 24px 36px; }
   .section, .overview-grid, .indicator-card { padding: 14px; }
-  .header-meta { grid-template-columns: 1fr; }
   .counters-grid { grid-template-columns: 1fr; }
   .summary-table { min-width: 550px; }
   th, td { padding: 9px; }

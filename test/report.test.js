@@ -38,6 +38,9 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /shop-web/);
   assert.match(html, /v4\.12\.0/);
   assert.match(html, /Коммит недоступен/);
+  assert.deepEqual([...html.matchAll(/<dt>(Проект|Запуск|Коммит)<\/dt>/g)].map(([, label]) => label), [
+    'Проект', 'Запуск', 'Коммит',
+  ]);
   assert.doesNotMatch(html, /<dt>Ветка<\/dt>/);
   assert.match(html, /Версия 0\.1\.0/);
   assert.match(html, /Code PushUp 0\.126\.4/);
