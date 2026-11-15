@@ -107,8 +107,9 @@ test('ESLint и Prettier показывают свои находки в отд�
   assert.doesNotMatch(eslint, /src\/format-me\.js/);
   assert.match(prettier, /Форматирование \(Prettier\)[\s\S]*src\/format-me\.js/);
   assert.doesNotMatch(prettier, /src\/demo\.js/);
-  assert.match(card, /href="#eslint-findings"/);
-  assert.match(card, /href="#prettier-findings"/);
+  assert.match(card, /class="details-link" href="#eslint-findings">Подробности \(ESLint\)/);
+  assert.match(card, /class="details-link" href="#prettier-findings">Подробности \(Prettier\)/);
+  assert.doesNotMatch(card, /class="check-header"|Линтер \(ESLint\)|Форматирование \(Prettier\)/);
   assert.doesNotMatch(card, /src\/(demo|format-me)\.js/);
 });
 
@@ -156,6 +157,9 @@ test('шкала LCOV следует статусу покрытия, а вре�
   assert.match(coverageCard, /meter-target" style="left:90%"/);
   assert.match(coverageCard, /Порог 65%/);
   assert.match(coverageCard, /Цель 90%/);
+  assert.match(coverageCard, /class="details-link" href="#coverage-findings">Подробности \(LCOV\)/);
+  assert.match(coverageCard, /class="details-link" href="#test-findings">Подробности \(Jest \/ Vitest\)/);
+  assert.doesNotMatch(coverageCard, /class="check-header"|Покрытие кода \(LCOV\)|Итоги тестов \(Jest \/ Vitest\)/);
   assert.match(coverageCard, /Jest \/ Vitest, LCOV<\/code><span>1 с/);
   assert.match(html, /<code>npm audit<\/code><\/footer>/);
 });

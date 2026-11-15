@@ -311,27 +311,29 @@ function renderIssues(issues: IResultIssue[], sectionTitle?: string, reference: 
 }
 
 function renderLargestFiles(files: { file: string; bytes: number }[]): string {
-  if (files.length === 0) return '';
+  if (files.length === 0) {
+    return '';
+  }
   const total = files.length;
   const sliced = files.slice(0, MAX_LIST_ITEMS);
 
   const rows = sliced.map((f) => `
     <tr>
       <td class="code-path">${escapeHtml(f.file)}</td>
-      <td style="text-align: right;">${escapeHtml(formatBytes(f.bytes))}</td>
+      <td class="file-size">${escapeHtml(formatBytes(f.bytes))}</td>
     </tr>
   `).join('');
 
   return `
-  <details>
-    <summary>Крупнейшие файлы (${total})</summary>
+  <details class="largest-files">
+    <summary class="details-link">Крупнейшие файлы (${total})</summary>
     <div class="details-content">
-      <div class="table-wrapper">
+      <div class="table-wrapper" role="region" aria-label="Крупнейшие файлы сборки" tabindex="0">
         <table>
           <thead>
             <tr>
-              <th>Файл</th>
-              <th style="width: 120px; text-align: right;">Размер</th>
+              <th scope="col">Файл</th>
+              <th scope="col" class="file-size">Размер</th>
             </tr>
           </thead>
           <tbody>
@@ -507,6 +509,7 @@ const findingsSectionIds: Partial<Record<IResultCheck['id'], string>> = {
   coverage: 'coverage-findings',
   tests: 'test-findings',
 };
+const detailsOnlyInCards = new Set<IResultCheck['id']>(['coverage', 'tests', 'lint', 'prettier']);
 
 function renderCheckProblem({ id, status, reason, action, code, logFile, incomplete }: IResultCheck): string {
   const showReason = (status === 'no-data' || status === 'disabled' || incomplete) && reason;
@@ -519,18 +522,21 @@ function renderCheckProblem({ id, status, reason, action, code, logFile, incompl
   return `<div class="callout"><p class="callout-title">${escapeHtml(reason)}</p>${action ? `<p class="callout-action">${escapeHtml(action)}</p>` : ''}</div>${diagnosis}`;
 }
 
-function renderCheck(check: IResultCheck, showStatus: boolean, showFindingsSections: boolean): string {
+function renderCheck(check: IResultCheck, showStatus: boolean): string {
   const { id, status, details } = check;
-  const sectionId = showFindingsSections ? findingsSectionIds[id] : undefined;
+  const sectionId = findingsSectionIds[id];
+  const link = sectionId
+    ? `<a class="details-link" href="#${sectionId}">Подробности (${escapeHtml(checkSources[id])})</a>`
+    : '';
+  if (detailsOnlyInCards.has(id)) {
+    return link;
+  }
   const body = renderCheckProblem(check);
   const detail = [
     sectionId === undefined && details?.issues ? renderIssues(details.issues) : '',
     details?.largestFiles ? renderLargestFiles(details.largestFiles) : '',
     sectionId === undefined && details?.rules ? renderRules(details.rules) : '',
   ].join('');
-  const link = sectionId
-    ? `<p><a href="#${sectionId}">Подробности (${escapeHtml(checkSources[id])})</a></p>`
-    : '';
   if (!showStatus && body === '' && detail === '' && link === '') {
     return '';
   }
@@ -577,36 +583,44 @@ function renderCoverageFindings(check: IResultCheck, indicator: IResultIndicator
   </div>`;
 }
 
-function renderFindingsSections({ indicators }: FrontisResult): string {
-  return indicators.flatMap((indicator) => indicator.checks.map((check) => {
-    const { id } = check;
-    const sectionId = findingsSectionIds[id];
-    if (sectionId === undefined) {
-      return '';
+function renderFindingsSection(indicator: IResultIndicator, check: IResultCheck): string {
+  const { id } = check;
+  const sectionId = findingsSectionIds[id];
+  if (sectionId === undefined) {
+    return '';
+  }
+  const title = CHECK_TITLES[id];
+  const problem = renderCheckProblem(check);
+  const isDependencyCheck = id === 'audit' || id === 'outdated';
+  const issues = renderIssues(check.details?.issues ?? [], title, isDependencyCheck ? 'package' : 'file');
+  const metrics = renderCoverageFacts(check);
+  const findings = renderCoverageFindings(check, indicator);
+  const rules = renderRules(check.details?.rules ?? []);
+  const empty = check.status === 'no-data' || check.status === 'disabled' ? 'Данные о находках недоступны.' : 'Находок нет.';
+  return `<section class="section" id="${sectionId}" aria-labelledby="${sectionId}-title">
+    <div class="section-heading">
+      <h2 class="section-title" id="${sectionId}-title">${escapeHtml(title)}</h2>
+      ${renderStatus(check.status)}
+    </div>
+    <div class="findings-body">
+      ${problem}
+      ${metrics}
+      ${findings}
+      ${issues}
+      ${findings === '' && issues === '' && problem === '' ? `<p class="empty-state">${empty}</p>` : ''}
+      ${rules}
+    </div>
+  </section>`;
+}
+
+function renderFindingsSections(indicators: readonly IResultIndicator[]): string {
+  return indicators.map((indicator) => {
+    const sections = indicator.checks.map((check) => renderFindingsSection(indicator, check)).join('');
+    if (indicator.id === 'coverage' && sections !== '') {
+      return `<div class="coverage-findings-grid">${sections}</div>`;
     }
-    const title = CHECK_TITLES[id];
-    const problem = renderCheckProblem(check);
-    const isDependencyCheck = id === 'audit' || id === 'outdated';
-    const issues = renderIssues(check.details?.issues ?? [], title, isDependencyCheck ? 'package' : 'file');
-    const metrics = renderCoverageFacts(check);
-    const findings = renderCoverageFindings(check, indicator);
-    const rules = renderRules(check.details?.rules ?? []);
-    const empty = check.status === 'no-data' || check.status === 'disabled' ? 'Данные о находках недоступны.' : 'Находок нет.';
-    return `<section class="section" id="${sectionId}" aria-labelledby="${sectionId}-title">
-      <div class="section-heading">
-        <h2 class="section-title" id="${sectionId}-title">${escapeHtml(title)}</h2>
-        ${renderStatus(check.status)}
-      </div>
-      <div class="findings-body">
-        ${problem}
-        ${metrics}
-        ${findings}
-        ${issues}
-        ${findings === '' && issues === '' && problem === '' ? `<p class="empty-state">${empty}</p>` : ''}
-        ${rules}
-      </div>
-    </section>`;
-  })).join('');
+    return sections;
+  }).join('');
 }
 
 function renderIndicators(indicators: readonly IResultIndicator[], options: GenerateReportOptions): string {
@@ -624,7 +638,7 @@ function renderIndicators(indicators: readonly IResultIndicator[], options: Gene
     const duration = sumKnown(...active.map((check) => options.durations?.get(check.id)));
     const sources = active.map((check) => check.id === 'build-size' ? options.buildDir ?? checkSources[check.id] : checkSources[check.id]);
     const elapsed = formatDuration(duration);
-    const checksHtml = checks.map((check) => renderCheck(check, checks.length > 1, options.result !== undefined)).join('');
+    const checksHtml = checks.map((check) => renderCheck(check, checks.length > 1)).join('');
     const fallback = status === 'no-data' && checksHtml === '' && indicator.reason
       ? `<div class="callout"><p>${escapeHtml(indicator.reason)}</p><p class="callout-action">${escapeHtml(indicator.action)}</p></div>`
       : '';
@@ -676,16 +690,19 @@ function renderImportMap(map: FrontisResult['importMap']): string {
         <td><strong><code>${escapeHtml(name)}</code></strong></td>
         <td class="cell-now"><code>${escapeHtml(current)}</code></td>
         <td class="cell-target"><code>${escapeHtml(latest)}</code></td>
-        <td>${locations === '' ? '<span class="empty-state">Импорты не найдены.</span>' : `<details>
-          <summary aria-label="Импорты ${escapeHtml(name)}: ${imports.length}">Найдено: ${imports.length}</summary>
-          <div class="details-content"><ul>${locations}</ul>${more}</div>
-        </details>`}</td>
+        <td>${locations === '' ? '<span class="empty-state">Импорты не найдены.</span>' : `<ul class="import-locations">${locations}</ul>${more}`}</td>
       </tr>`;
     }).join('');
     content = `<div class="table-wrapper" role="region" aria-label="Таблица импортов отстающих пакетов" tabindex="0">
-      <table class="summary-table">
+      <table class="summary-table import-map-table">
+        <colgroup>
+          <col class="import-package-column">
+          <col class="import-version-column">
+          <col class="import-version-column">
+          <col>
+        </colgroup>
         <thead>
-          <tr><th scope="col">Пакет</th><th scope="col" class="column-number">Сейчас</th><th scope="col" class="column-number">Доступно</th><th scope="col">Импорты</th></tr>
+          <tr><th scope="col">Пакет</th><th scope="col" class="column-number">Сейчас</th><th scope="col" class="column-number">Новая версия</th><th scope="col">Импорты</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -772,7 +789,7 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
       ${renderScoreAndCounters(score, indicators)}
       ${result ? renderRecommendations(result) + renderNoDataTable(result.indicators) : renderDiagnostics(noData)}
       ${renderIndicators(indicators, options)}
-      ${result ? renderFindingsSections(result) : ''}
+      ${renderFindingsSections(indicators)}
       ${renderImportMap(result?.importMap)}
     </main>
     ${renderFooter(version, engineVersion, duration)}
