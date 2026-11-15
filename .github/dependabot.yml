@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      code-pushup:
+        patterns:
+          - '@code-pushup/*'
 
   - package-ecosystem: github-actions
     directory: /
