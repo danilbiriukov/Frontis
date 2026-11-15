@@ -416,8 +416,10 @@ function indicatorMetrics(indicator: IResultIndicator): {
     case 'audit':
       return {
         value: sumKnown(n('production'), n('development')),
-        tiles: [['Критических', n('critical')], ['Высоких', n('high')], ['Средних', n('moderate')], ['Низких', n('low')]],
-        rows: [['Информационных', n('info')]],
+        rows: [
+          ['Критических', n('critical')], ['Высоких', n('high')], ['Средних', n('moderate')],
+          ['Низких', n('low')], ['Информационных', n('info')],
+        ],
       };
     case 'coverage': {
       const lines = n('lines');
