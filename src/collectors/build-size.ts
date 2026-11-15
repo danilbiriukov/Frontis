@@ -52,8 +52,11 @@ export function createBuildSizeCollector(options: BuildSizeOptions): Collector<B
       const entries: Dirent[] = await readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         const path = join(dir, entry.name);
-        if (entry.isDirectory()) await walk(path);
-        else if (entry.isFile()) sizes.push({ file: toPath(projectDir, path), bytes: (await stat(path)).size });
+        if (entry.isDirectory()) {
+          await walk(path);
+        } else if (entry.isFile() && !entry.name.endsWith('.map')) {
+          sizes.push({ file: toPath(projectDir, path), bytes: (await stat(path)).size });
+        }
       }
     };
     try {
@@ -63,7 +66,7 @@ export function createBuildSizeCollector(options: BuildSizeOptions): Collector<B
       return noData('build-dir-unreadable', `Не удалось прочитать папку сборки ${buildDir}`, 'Проверьте права на чтение папки сборки.', error);
     }
     if (sizes.length === 0) {
-      return noData('empty-build-dir', `Папка сборки ${buildDir} пуста`, 'Соберите проект перед запуском frontis.');
+      return noData('empty-build-dir', `В папке ${buildDir} нет файлов сборки для расчёта`, 'Соберите проект перед запуском frontis.');
     }
 
     const totalBytes = sizes.reduce((sum, { bytes }) => sum + bytes, 0);
