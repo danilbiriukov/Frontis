@@ -163,6 +163,30 @@ test('зависимости, покрытие и тесты показываю�
   assert.doesNotMatch(testsSection, /Покрытие строк|Тестов пройдено|metric-tiles/);
 });
 
+test('отчёт без пропусков скрывает этот раздел и показывает находки Knip отдельно от счётчиков', () => {
+  const result = structuredClone(fixtureResult);
+  const unusedCode = result.indicators.find(({ id }) => id === 'unusedCode');
+  const knip = unusedCode.checks[0];
+  unusedCode.status = knip.status = 'fix';
+  knip.facts.files = 1;
+  knip.details = {
+    issues: [{ audit: 'frontis-knip/unused-files', severity: 'error', message: 'Неиспользуемый файл', source: { file: 'src/unused.ts' } }],
+  };
+  result.indicators = [unusedCode];
+  result.score = { value: null, zone: null, known: 1, total: 1 };
+  result.recommendations = [];
+
+  const html = generateHtmlReport({ result });
+  const card = html.match(/id="indicator-unusedCode">[\s\S]*?<\/article>/)?.[0] ?? '';
+  const findings = html.match(/id="knip-findings"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.doesNotMatch(html, /id="no-data-reasons"|class="overview-details"/);
+  assert.match(card, /class="metric-rows"[\s\S]*<dt>Файлов<\/dt><dd class="number">1<\/dd>/);
+  assert.match(card, /href="#knip-findings"/);
+  assert.doesNotMatch(card, /metric-tiles|src\/unused\.ts/);
+  assert.match(findings, /class="tool-description"[\s\S]*src\/unused\.ts/);
+  assert.match(findings, /name="knip-findings-severity" value="all" checked/);
+});
+
 test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {
   const result = structuredClone(fixtureResult);
   const coverage = result.indicators.find(({ id }) => id === 'coverage');

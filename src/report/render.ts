@@ -237,6 +237,9 @@ function collectNoDataItems(indicators: readonly IResultIndicator[]): NoDataItem
 
 function renderNoDataSection(indicators: readonly IResultIndicator[]): string {
   const items = collectNoDataItems(indicators);
+  if (items.length === 0) {
+    return '';
+  }
   const blocks = items.map(({ name, reason, action }) => `<li class="callout">
     <h3 class="availability-item-title">${escapeHtml(name)}</h3>
     <p>${escapeHtml(reason)}</p>
@@ -244,7 +247,7 @@ function renderNoDataSection(indicators: readonly IResultIndicator[]): string {
   </li>`).join('');
   return `<section class="section" id="no-data-reasons" aria-labelledby="no-data-title">
     <div class="section-heading"><h2 class="section-title" id="no-data-title">Показатели без данных</h2></div>
-    ${blocks ? `<ul class="availability-list" role="list">${blocks}</ul>` : '<p class="empty-state">Все показатели доступны.</p>'}
+    <ul class="availability-list" role="list">${blocks}</ul>
   </section>`;
 }
 
@@ -437,8 +440,10 @@ function indicatorMetrics(indicator: IResultIndicator): {
     case 'unusedCode':
       return {
         value: sumKnown(n('files'), n('exports'), n('dependencies'), n('types'), n('otherFindings')),
-        tiles: [['Файлов', n('files')], ['Экспортов', n('exports')], ['Зависимостей', n('dependencies')]],
-        rows: [['Типов', n('types')], ['Других находок', n('otherFindings')]],
+        rows: [
+          ['Файлов', n('files')], ['Экспортов', n('exports')], ['Зависимостей', n('dependencies')],
+          ['Типов', n('types')], ['Других находок', n('otherFindings')],
+        ],
       };
     case 'buildSize': {
       const size = n('sizeBytes');
@@ -458,6 +463,7 @@ function renderStatus(status: IResultCheck['status']): string {
 const findingsSectionIds: Partial<Record<IResultCheck['id'], string>> = {
   outdated: 'outdated-findings',
   audit: 'audit-findings',
+  knip: 'knip-findings',
   lint: 'eslint-findings',
   prettier: 'prettier-findings',
   coverage: 'coverage-findings',
@@ -466,6 +472,7 @@ const findingsSectionIds: Partial<Record<IResultCheck['id'], string>> = {
 const checkDescriptions: Partial<Record<IResultCheck['id'], string>> = {
   outdated: 'Проверяет версии зависимостей.',
   audit: 'Ищет уязвимости в зависимостях.',
+  knip: 'Ищет неиспользуемый код и зависимости.',
   lint: 'Проверяет код по правилам проекта.',
   prettier: 'Проверяет форматирование файлов.',
   coverage: 'Измеряет покрытие кода тестами.',
