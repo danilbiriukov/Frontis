@@ -44,6 +44,11 @@ h1 { font-size: clamp(25px, 5vw, 32px); line-height: 1.16; font-weight: 680; }
 
 .section, .overview-grid { padding: 24px 26px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
 .section, .instrument-section { margin-top: 24px; }
+.overview-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 24px; }
+.overview-details > .section { margin-top: 0; min-width: 0; }
+.overview-details > :only-child { grid-column: 1 / -1; }
+.availability-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.availability-item-title { margin: 0 0 4px; font-size: 14px; font-weight: 650; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 16px; }
 .section-title { font-size: 18px; line-height: 1.25; font-weight: 650; }
 .empty-state { color: var(--secondary); font-size: 13px; }
@@ -118,7 +123,7 @@ td strong, .cell-now { color: var(--ink); }
 .issue-filter label:hover span { background: var(--table-head); }
 .issue-filter input:checked + span { border-color: var(--link); color: var(--link); background: var(--table-head); }
 .issue-filter input:focus-visible + span { outline: 2px solid var(--link); outline-offset: 2px; }
-.finding-list, .details-content .finding-list, .coverage-deviations {
+.finding-list, .details-content .finding-list {
   display: grid; gap: 8px; margin: 0; padding: 0; list-style: none;
 }
 .finding-item {
@@ -136,11 +141,8 @@ td strong, .cell-now { color: var(--ink); }
 .finding-content { display: grid; gap: 4px; overflow-wrap: anywhere; }
 .finding-location { font-size: 13px; font-weight: 650; }
 .finding-message { color: var(--body); font-size: 13px; }
-.rule-counts, .coverage-deviation { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--muted); }
+.rule-counts { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--muted); }
 .rule-counts dt { font-family: var(--mono); font-size: 12px; }
-.coverage-deviation { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
-.coverage-deviation p { flex-basis: 100%; color: var(--secondary); overflow-wrap: anywhere; }
-#coverage-findings .metric-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 @media screen {
   .issue-panel:has(input[value="error"]:checked) .finding-item:not([data-severity="error"]),
@@ -210,6 +212,7 @@ summary { cursor: pointer; overflow-wrap: anywhere; color: var(--link); min-heig
 
 @media (max-width: 850px) {
   .overview-grid { grid-template-columns: 1fr; gap: 16px; }
+  .overview-details { grid-template-columns: minmax(0, 1fr); }
   .score-card { border-inline-end: 0; border-bottom: 1px solid var(--line); padding: 0 0 14px; }
 }
 @media (max-width: 580px) {

@@ -214,7 +214,7 @@ interface NoDataItem {
   action: string;
 }
 
-function collectNoDataItems(indicators: IResultIndicator[]): NoDataItem[] {
+function collectNoDataItems(indicators: readonly IResultIndicator[]): NoDataItem[] {
   const items: NoDataItem[] = [];
   for (const ind of indicators) {
     const reasons = new Set<string>();
@@ -235,35 +235,16 @@ function collectNoDataItems(indicators: IResultIndicator[]): NoDataItem[] {
   return items;
 }
 
-function renderNoDataTable(indicators: IResultIndicator[]): string {
+function renderNoDataSection(indicators: readonly IResultIndicator[]): string {
   const items = collectNoDataItems(indicators);
-  if (items.length === 0) return '';
-
-  const rows = items.map((item) => `
-    <tr>
-      <td><strong>${escapeHtml(item.name)}</strong></td>
-      <td>${escapeHtml(item.reason)}</td>
-      <td>${escapeHtml(item.action)}</td>
-    </tr>
-  `).join('');
-
-  return `
-  <section class="section" id="no-data-reasons">
-    <div class="section-heading"><h2 class="section-title">Показатели без данных</h2></div>
-    <div class="table-wrapper" role="region" aria-label="Таблица причин пропуска" tabindex="0">
-      <table class="summary-table">
-        <thead>
-          <tr>
-            <th scope="col">Показатель</th>
-            <th scope="col">Причина</th>
-            <th scope="col">Рекомендуемое действие</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    </div>
+  const blocks = items.map(({ name, reason, action }) => `<li class="callout">
+    <h3 class="availability-item-title">${escapeHtml(name)}</h3>
+    <p>${escapeHtml(reason)}</p>
+    ${action ? `<p class="callout-action">${escapeHtml(action)}</p>` : ''}
+  </li>`).join('');
+  return `<section class="section" id="no-data-reasons" aria-labelledby="no-data-title">
+    <div class="section-heading"><h2 class="section-title" id="no-data-title">Показатели без данных</h2></div>
+    ${blocks ? `<ul class="availability-list" role="list">${blocks}</ul>` : '<p class="empty-state">Все показатели доступны.</p>'}
   </section>`;
 }
 
@@ -425,7 +406,7 @@ function indicatorMetrics(indicator: IResultIndicator): {
       const lines = n('lines');
       return {
         value: formatPercent(lines),
-        tiles: [['Ветви', formatPercent(n('branches'))], ['Функции', formatPercent(n('functions'))]],
+        tiles: [['Строки', formatPercent(lines)], ['Ветви', formatPercent(n('branches'))], ['Функции', formatPercent(n('functions'))]],
         scale: lines === undefined ? '' : renderMeter('Покрытие строк', lines, {
           warn: n('warn'), target: n('target'), status: primary?.status,
         }),
@@ -487,12 +468,14 @@ const checkDescriptions: Partial<Record<IResultCheck['id'], string>> = {
   audit: 'Ищет уязвимости в зависимостях.',
   lint: 'Проверяет код по правилам проекта.',
   prettier: 'Проверяет форматирование файлов.',
+  coverage: 'Измеряет покрытие кода тестами.',
+  tests: 'Показывает сбои и пропуски тестов.',
 };
 const checksWithOwnSections = new Set<IResultCheck['id']>(['coverage', 'tests', 'lint', 'prettier']);
 
 function renderDetailsLink(id: IResultCheck['id']): string {
   const sectionId = findingsSectionIds[id];
-  if (sectionId === undefined || checkDescriptions[id] === undefined) {
+  if (sectionId === undefined || id === 'coverage' || id === 'tests') {
     return '';
   }
   return `<a class="details-link" href="#${sectionId}">Подробности (${escapeHtml(checkSources[id])})</a>`;
@@ -527,35 +510,16 @@ function renderCheck(check: IResultCheck): string {
   return `<div class="check-item">${body}${detail}</div>`;
 }
 
-function renderCoverageFacts(check: IResultCheck): string {
-  if (check.id === 'tests') {
-    return renderMetrics(testFacts(check.facts), true);
-  }
-  if (check.id === 'coverage') {
-    return renderMetrics([
-      ['Строки', formatPercent(asNumber(check.facts.lines))],
-      ['Ветви', formatPercent(asNumber(check.facts.branches))],
-      ['Функции', formatPercent(asNumber(check.facts.functions))],
-    ], true);
-  }
-  return '';
-}
-
-function renderCoverageFindings(check: IResultCheck, indicator: IResultIndicator): string {
+function coverageDeviations(check: IResultCheck, indicator: IResultIndicator): IResultIssue[] {
   if (check.id !== 'coverage' && check.id !== 'tests') {
-    return '';
+    return [];
   }
-  const findings = indicator.findings.filter(({ kind }) => kind.startsWith(`${check.id}.`));
-  if (findings.length === 0) {
-    return '';
-  }
-  const rows = findings.map(({ kind, importance, now, target }) => `
-    <li class="coverage-deviation">
-      <strong>${escapeHtml(recommendationTitles[kind] ?? CHECK_TITLES[check.id])}</strong>
-      <span class="badge badge-importance-${escapeHtml(importance)}">${escapeHtml(IMPORTANCE_LABELS[importance])}</span>
-      <p>Сейчас <code>${escapeHtml(now)}</code> · Цель <code>${escapeHtml(target)}</code></p>
-    </li>`).join('');
-  return `<ul class="coverage-deviations" role="list" aria-label="Отклонения от цели">${rows}</ul>`;
+  const severity = { high: 'error', mid: 'warning', low: 'info' } as const;
+  return indicator.findings.filter(({ kind }) => kind.startsWith(`${check.id}.`)).map(({ kind, importance, now, target }) => ({
+    audit: kind,
+    severity: severity[importance],
+    message: `${recommendationTitles[kind] ?? CHECK_TITLES[check.id]}. Сейчас ${now}, цель ${target}.`,
+  }));
 }
 
 function renderFindingsSection(indicator: IResultIndicator, check: IResultCheck): string {
@@ -568,63 +532,47 @@ function renderFindingsSection(indicator: IResultIndicator, check: IResultCheck)
   const description = checkDescriptions[id];
   const problem = renderCheckProblem(check);
   const isDependencyCheck = id === 'audit' || id === 'outdated';
-  const issues = renderIssues(check.details?.issues ?? [], sectionId, isDependencyCheck ? 'package' : 'file');
-  const metrics = renderCoverageFacts(check);
-  const findings = renderCoverageFindings(check, indicator);
+  const entries = [...(check.details?.issues ?? []), ...coverageDeviations(check, indicator)];
+  const issues = renderIssues(entries, sectionId, isDependencyCheck ? 'package' : 'file');
   const rules = renderRules(check.details?.rules ?? []);
   const empty = check.status === 'no-data' || check.status === 'disabled' ? 'Данные о находках недоступны.' : 'Находок нет.';
-  const inTools = indicator.id === 'coverage';
-  const tag = inTools ? 'article' : 'section';
-  const classes = inTools ? `indicator-card status-${escapeHtml(check.status)}` : 'section';
-  const heading = inTools
-    ? `<h3 class="indicator-title" id="${sectionId}-title">${escapeHtml(title)}</h3>`
-    : `<header class="findings-heading">
-        <h2 class="section-title" id="${sectionId}-title">${escapeHtml(title)}</h2>
-        ${description === undefined ? '' : `<p class="tool-description">${escapeHtml(description)}</p>`}
-      </header>`;
-  return `<${tag} class="${classes}" id="${sectionId}" aria-labelledby="${sectionId}-title">
-    ${heading}
-    <div class="${inTools ? 'indicator-body' : 'findings-body'}">
+  return `<section class="section" id="${sectionId}" aria-labelledby="${sectionId}-title">
+    <header class="findings-heading">
+      <h2 class="section-title" id="${sectionId}-title">${escapeHtml(title)}</h2>
+      ${description === undefined ? '' : `<p class="tool-description">${escapeHtml(description)}</p>`}
+    </header>
+    <div class="findings-body">
       ${problem}
-      ${metrics}
-      ${findings}
       ${issues}
-      ${findings === '' && issues === '' && problem === '' ? `<p class="empty-state">${empty}</p>` : ''}
+      ${issues === '' && problem === '' ? `<p class="empty-state">${empty}</p>` : ''}
       ${rules}
     </div>
-  </${tag}>`;
+  </section>`;
 }
 
 function renderFindingsSections(indicators: readonly IResultIndicator[]): string {
-  return indicators.filter(({ id }) => id !== 'coverage')
-    .flatMap((indicator) => indicator.checks.map((check) => renderFindingsSection(indicator, check)))
+  return indicators.flatMap((indicator) => indicator.checks.map((check) => renderFindingsSection(indicator, check)))
     .join('');
 }
 
-function renderIndicators(indicators: readonly IResultIndicator[], options: GenerateReportOptions): string {
-  if (indicators.length === 0) {
-    return '';
-  }
-  const cards = Object.keys(indicatorChecks).flatMap((id) => {
-    const indicator = indicators.find((item) => item.id === id);
-    if (indicator === undefined) {
-      return [];
-    }
-    const { status, checks, incomplete } = indicator;
-    const metrics = status === 'no-data' ? {} : indicatorMetrics(indicator);
-    const active = checks.filter((check) => check.status !== 'disabled');
-    const duration = sumKnown(...active.map((check) => options.durations?.get(check.id)));
-    const sources = active.map((check) => check.id === 'build-size' ? options.buildDir ?? checkSources[check.id] : checkSources[check.id]);
-    const elapsed = formatDuration(duration);
-    const checksHtml = checks.map(renderCheck).join('');
-    const detailsLinks = checks.map(({ id: checkId }) => renderDetailsLink(checkId)).join('');
-    const fallback = status === 'no-data' && checksHtml === '' && indicator.reason
-      ? `<div class="callout"><p>${escapeHtml(indicator.reason)}</p><p class="callout-action">${escapeHtml(indicator.action)}</p></div>`
-      : '';
-
-    return [`<article class="indicator-card status-${escapeHtml(status)}" id="indicator-${escapeHtml(id)}">
+function renderIndicatorCard(indicator: IResultIndicator, options: GenerateReportOptions, standalone = false): string {
+  const { id, status, checks, incomplete } = indicator;
+  const metrics = status === 'no-data' ? {} : indicatorMetrics(indicator);
+  const active = checks.filter((check) => check.status !== 'disabled');
+  const duration = sumKnown(...active.map((check) => options.durations?.get(check.id)));
+  const sources = active.map((check) => check.id === 'build-size' ? options.buildDir ?? checkSources[check.id] : checkSources[check.id]);
+  const elapsed = formatDuration(duration);
+  const checksHtml = checks.map(renderCheck).join('');
+  const detailsLinks = checks.map(({ id: checkId }) => renderDetailsLink(checkId)).join('');
+  const fallback = status === 'no-data' && checksHtml === '' && indicator.reason
+    ? `<div class="callout"><p>${escapeHtml(indicator.reason)}</p><p class="callout-action">${escapeHtml(indicator.action)}</p></div>`
+    : '';
+  const tag = standalone ? 'section' : 'article';
+  const titleTag = standalone ? 'h2' : 'h3';
+  const titleClass = standalone ? 'section-title' : 'indicator-title';
+  return `<${tag} class="${standalone ? 'section ' : ''}indicator-card status-${escapeHtml(status)}" id="indicator-${escapeHtml(id)}">
       <div class="indicator-header">
-        <h3 class="indicator-title">${escapeHtml(INDICATOR_TITLES[indicator.id])}</h3>
+        <${titleTag} class="${titleClass}">${escapeHtml(INDICATOR_TITLES[id])}</${titleTag}>
         ${metrics.value === undefined ? '' : `<span class="indicator-value number">${escapeHtml(typeof metrics.value === 'number' ? decimals.format(metrics.value) : metrics.value)}</span>`}
       </div>
       ${incomplete ? '<span class="badge badge-incomplete indicator-incomplete">Неполные данные</span>' : ''}
@@ -637,14 +585,32 @@ function renderIndicators(indicators: readonly IResultIndicator[], options: Gene
       </div>
       ${detailsLinks ? `<footer class="card-footer card-actions">${detailsLinks}</footer>` :
         `<footer class="card-footer">${sources.length > 0 ? `<code>${escapeHtml(sources.join(', '))}</code>` : '<span>Проверки не запущены</span>'}${elapsed ? `<span>${escapeHtml(elapsed)}</span>` : ''}</footer>`}
-    </article>`];
-  }).join('');
+    </${tag}>`;
+}
 
-  const coverage = indicators.find(({ id }) => id === 'coverage');
-  const coverageCards = coverage === undefined ? '' : coverage.checks.map((check) => renderFindingsSection(coverage, check)).join('');
+function renderOverviewDetails(indicators: readonly IResultIndicator[], options: GenerateReportOptions): string {
+  const build = indicators.find(({ id }) => id === 'buildSize');
+  const missing = options.result === undefined ? '' : renderNoDataSection(indicators);
+  if (build === undefined && missing === '') {
+    return '';
+  }
+  return `<div class="overview-details">
+    ${missing}
+    ${build === undefined ? '' : renderIndicatorCard(build, options, true)}
+  </div>`;
+}
+
+function renderIndicators(indicators: readonly IResultIndicator[], options: GenerateReportOptions): string {
+  const cards = Object.keys(indicatorChecks).filter((id) => id !== 'buildSize').map((id) => {
+    const indicator = indicators.find((item) => item.id === id);
+    return indicator === undefined ? '' : renderIndicatorCard(indicator, options);
+  }).join('');
+  if (cards === '') {
+    return '';
+  }
   return `<section class="instrument-section" id="indicators">
     <div class="section-heading"><h2 class="section-title">Инструменты</h2></div>
-    <div class="indicators-list">${cards}${coverageCards}</div>
+    <div class="indicators-list">${cards}</div>
   </section>`;
 }
 
@@ -769,7 +735,8 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
     <main>
       ${result ? '' : '<p class="diagnostic-notice">Диагностический отчёт. Проверки не дали пригодных аудитов.</p>'}
       ${renderScoreAndCounters(score, indicators)}
-      ${result ? renderRecommendations(result) + renderNoDataTable(result.indicators) : renderDiagnostics(noData)}
+      ${result ? renderRecommendations(result) : renderDiagnostics(noData)}
+      ${renderOverviewDetails(indicators, options)}
       ${renderIndicators(indicators, options)}
       ${renderFindingsSections(indicators)}
       ${renderImportMap(result?.importMap)}

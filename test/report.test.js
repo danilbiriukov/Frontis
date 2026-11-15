@@ -65,10 +65,12 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /badge-importance-mid/);
   assert.doesNotMatch(html, /От высокой важности к низкой\./);
 
-  // Таблица причин "Нет данных"
-  assert.match(html, /Показатели без данных/);
-  assert.match(html, /В отчёте Code PushUp не хватает аудитов для проверки\./);
-  assert.match(html, /В проекте нет настроек Prettier\./);
+  const missing = html.match(/<section class="section" id="no-data-reasons"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(missing, /Показатели без данных/);
+  assert.match(missing, /class="availability-list"/);
+  assert.doesNotMatch(missing, /<table\b/);
+  assert.match(missing, /В отчёте Code PushUp не хватает аудитов для проверки\./);
+  assert.match(missing, /В проекте нет настроек Prettier\./);
 
   // Карточки показателей
   assert.match(html, /Неиспользуемый код/);
@@ -153,11 +155,12 @@ test('зависимости, покрытие и тесты показываю�
     assert.ok(html.includes(`href="#${id}"`));
     assert.match(section(id), /class="tool-description"/);
   }
-  const toolCard = (id) => html.match(new RegExp(`<article class="indicator-card [^"]+" id="${id}"[\\s\\S]*?</article>`))?.[0];
-  assert.match(toolCard('coverage-findings'), /Покрытие строк[\s\S]*90%/);
-  assert.doesNotMatch(toolCard('coverage-findings'), /Тесты с ошибкой/);
-  assert.match(toolCard('test-findings'), /Тестов пройдено[\s\S]*Тесты с ошибкой/);
-  assert.doesNotMatch(toolCard('test-findings'), /Покрытие строк/);
+  const lcovSection = section('coverage-findings');
+  const testsSection = section('test-findings');
+  assert.match(lcovSection, /data-severity="warning"[\s\S]*Покрытие строк[\s\S]*90%/);
+  assert.doesNotMatch(lcovSection, /Тесты с ошибкой|metric-tiles/);
+  assert.match(testsSection, /data-severity="error"[\s\S]*Тесты с ошибкой/);
+  assert.doesNotMatch(testsSection, /Покрытие строк|Тестов пройдено|metric-tiles/);
 });
 
 test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {
@@ -178,6 +181,7 @@ test('шкала LCOV следует статусу покрытия, а вре�
   assert.match(coverageCard, /meter-target" style="left:90%"/);
   assert.match(coverageCard, /Порог 65%/);
   assert.match(coverageCard, /Цель 90%/);
+  assert.match(coverageCard, /class="metric-tile"><dt>Строки<\/dt><dd class="number">94%<\/dd>/);
   assert.doesNotMatch(coverageCard, /class="details-link"|Покрытие кода \(LCOV\)|Итоги тестов \(Jest \/ Vitest\)/);
   assert.match(coverageCard, /Jest \/ Vitest, LCOV<\/code><span>1 с/);
   assert.match(html, /<footer class="card-footer card-actions"><a class="details-link" href="#audit-findings">Подробности \(npm audit\)<\/a><\/footer>/);
