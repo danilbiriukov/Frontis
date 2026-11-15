@@ -19,15 +19,26 @@ const colors: Record<TPluginStatus, number> = {
 export function createRunProgress() {
   const interactive = process.stdout.isTTY && process.env.CI === undefined && process.env.NO_COLOR === undefined;
   const counts = { done: 0, error: 0, 'no-data': 0 };
+  const startedAt = new Map<string, number>();
+  const durations = new Map<string, number>();
   const update: TPluginProgress = (plugin, status) => {
+    if (status === 'running') {
+      startedAt.set(plugin, performance.now());
+    }
     if (status === 'done' || status === 'error' || status === 'no-data') {
       counts[status]++;
+      const start = startedAt.get(plugin);
+      if (start !== undefined) {
+        durations.set(plugin, Math.round(performance.now() - start));
+        startedAt.delete(plugin);
+      }
     }
     const label = labels[status];
     console.log(`[${plugin}] ${interactive ? `\x1b[${colors[status]}m${label}\x1b[0m` : label}`);
   };
   return {
     update,
+    durations,
     summary(audits: number) {
       console.log(
         `Аудиты Frontis: ${audits}. Модули без данных: ${counts['no-data']}. Успешные проверки: ${counts.done}. Ошибки: ${counts.error}.`,

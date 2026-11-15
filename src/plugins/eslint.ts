@@ -5,6 +5,7 @@ import { ruleIdToSlug } from '@code-pushup/eslint-plugin/src/lib/meta/hash.js';
 import { lintResultsToAudits } from '@code-pushup/eslint-plugin/src/lib/runner/transform.js';
 import { MAX_ISSUE_MESSAGE_LENGTH, MAX_TITLE_LENGTH, type AuditOutput, type Issue, type PluginConfig } from '@code-pushup/models';
 import type { ESLint, Linter } from 'eslint';
+import semver from 'semver';
 import { CollectorRunError } from '../collectors/code-pushup.js';
 import type { PluginProblem } from '../core/plugin-guard.js';
 import { ESLINT_CHECKED_FILES, ESLINT_OTHER_MESSAGES, ESLINT_PARSE_ERRORS } from './eslint-evidence.js';
@@ -15,6 +16,7 @@ interface Options {
 }
 
 const verifyFiles = 'Проверьте конфигурацию ESLint и шаблоны файлов.';
+const eslint10Node = '^20.19.0 || ^22.13.0 || >=24';
 const coverageUnconfirmed: PluginProblem = {
   code: 'eslint-coverage-unconfirmed',
   reason: 'ESLint вернул данные, по которым нельзя подтвердить список проверенных файлов.',
@@ -89,6 +91,21 @@ async function officialMetadata(options: Options, flat: boolean, files: string[]
   }
 }
 
+function eslint10Metadata(): Omit<PluginConfig, 'runner'> {
+  const { name: packageName, version } = createRequire(import.meta.url)('@code-pushup/eslint-plugin/package.json') as {
+    name: string;
+    version: string;
+  };
+  return {
+    slug: 'eslint',
+    title: 'ESLint',
+    icon: 'eslint',
+    packageName,
+    version,
+    audits: [],
+  };
+}
+
 export async function prepare(options: Options): Promise<PluginConfig | PluginProblem> {
   const cwd = process.cwd();
   const projectRequire = createRequire(join(cwd, 'package.json'));
@@ -106,22 +123,43 @@ export async function prepare(options: Options): Promise<PluginConfig | PluginPr
   }
 
   try {
-    const api = projectRequire(entry) as typeof import('eslint');
-    const version = api.ESLint?.version ?? '';
+    const { version, engines } = projectRequire('eslint/package.json') as {
+      version: string;
+      engines?: { node?: string };
+    };
     const [major, minor] = version.split('.').map(Number);
-    if ((major !== 9 && (major !== 8 || minor < 46)) || (flat && api.loadESLint === undefined)) {
+    if (major === 10) {
+      if (!flat) {
+        return {
+          code: 'eslint-legacy-config-unsupported',
+          reason: `ESLint ${version} не поддерживает конфигурацию .eslintrc.`,
+          action: 'Перенесите настройки в eslint.config.* или используйте ESLint 9.',
+        };
+      }
+      const nodeRange = engines?.node ?? eslint10Node;
+      if (!semver.satisfies(process.version, nodeRange)) {
+        return {
+          code: 'eslint-node-unsupported',
+          reason: `ESLint ${version} требует Node.js ${nodeRange}. Текущая версия ${process.version}.`,
+          action: 'Обновите Node.js или используйте ESLint 9.',
+        };
+      }
+    }
+    const api = projectRequire(entry) as typeof import('eslint');
+    if ((major !== 10 && major !== 9 && (major !== 8 || minor < 46)) ||
+        (major !== 10 && flat && api.loadESLint === undefined)) {
       return {
         code: 'eslint-unsupported',
-        reason: `Версия ESLint ${version || 'не определена'} не поддерживает выбранный формат конфигурации.`,
-        action: 'Установите ESLint 9 в проверяемом проекте.',
+        reason: `Версия ESLint ${version} не поддерживает выбранный формат конфигурации.`,
+        action: 'Установите ESLint 9 или используйте ESLint 10 с eslint.config.*.',
       };
     }
-    const Engine = api.loadESLint === undefined
+    const Engine = major === 10 || api.loadESLint === undefined
       ? api.ESLint
-      : flat ? await api.loadESLint({ useFlatConfig: true }) : await api.loadESLint({ useFlatConfig: false });
+      : await api.loadESLint({ useFlatConfig: flat });
     const eslint = new Engine({
       cwd,
-      overrideConfigFile: options.eslintrc,
+      ...(major === 10 ? {} : { overrideConfigFile: options.eslintrc }),
       errorOnUnmatchedPattern: false,
       ...(flat ? { warnIgnored: false } : {}),
     });
@@ -143,7 +181,7 @@ export async function prepare(options: Options): Promise<PluginConfig | PluginPr
       return coverageUnconfirmed;
     }
 
-    const plugin = await officialMetadata(options, flat, files);
+    const plugin = major === 10 ? eslint10Metadata() : await officialMetadata(options, flat, files);
     const auditBySlug = new Map(plugin.audits.map((audit) => [audit.slug, audit]));
     const ruleResults = results.map((result) => ({
       ...result,
@@ -151,9 +189,12 @@ export async function prepare(options: Options): Promise<PluginConfig | PluginPr
     }));
     // Преобразователь зафиксированной версии сохраняет официальные идентификаторы с учётом параметров.
     const converted = lintResultsToAudits({ results: ruleResults, ruleOptionsPerFile: rules.ruleOptionsPerFile });
+    const ruleMeta = major === 10 ? eslint.getRulesMetaForResults(results) : undefined;
     for (const { slug } of converted) {
       if (!auditBySlug.has(slug)) {
-        auditBySlug.set(slug, { slug, title: (rules.ruleNames.get(slug) ?? slug).slice(0, MAX_TITLE_LENGTH) });
+        const name = rules.ruleNames.get(slug) ?? slug;
+        const title = ruleMeta?.[name]?.docs?.description ?? name;
+        auditBySlug.set(slug, { slug, title: title.slice(0, MAX_TITLE_LENGTH) });
       }
     }
     const top = [...rules.ruleCounts]

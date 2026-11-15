@@ -4,6 +4,26 @@ import { test } from 'node:test';
 
 const progress = new URL('../dist/core/run-progress.js', import.meta.url).href;
 
+test('замеры сохраняются для проверок, которые начались и завершились', () => {
+  const code = `
+    import { createRunProgress } from ${JSON.stringify(progress)};
+    let clock = 100;
+    Object.defineProperty(performance, 'now', { value: () => clock });
+    const { update, durations } = createRunProgress();
+    update('prettier', 'no-data');
+    update('lint', 'running');
+    clock = 135;
+    update('lint', 'done');
+    update('coverage', 'running');
+    clock = 200;
+    update('coverage', 'error');
+    console.log(JSON.stringify([...durations]));
+  `;
+  const output = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' });
+  assert.equal(output.status, 0, output.stderr);
+  assert.deepEqual(JSON.parse(output.stdout.trimEnd().split('\n').at(-1)), [['lint', 35], ['coverage', 65]]);
+});
+
 test('цвет стадий используется только в интерактивной консоли вне CI и без NO_COLOR', () => {
   const code = `
     import { createRunProgress } from ${JSON.stringify(progress)};

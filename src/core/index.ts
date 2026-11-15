@@ -1,3 +1,4 @@
+import { relative } from 'node:path';
 import { readProjectGit } from '../collectors/project-info.js';
 import { loadEngineConfig } from './engine-config.js';
 import { ConfigError } from './errors.js';
@@ -39,6 +40,7 @@ export async function run(options: RunOptions): Promise<number> {
       const git = projectInfo === undefined ? await readProjectGit({ projectDir }) : projectInfo.git;
       const progress = createRunProgress();
       const { reports, noData } = await runPlannedPlugins(plan, progress.update);
+      const buildDir = relative(projectDir, plan.config.buildDir) || '.';
       const report = createReport({
         plugins: reports,
         commit: git?.commit ?? null,
@@ -50,6 +52,9 @@ export async function run(options: RunOptions): Promise<number> {
         const html = generateHtmlReport({
           noData,
           runAt,
+          durationMs: Math.round(performance.now() - start),
+          durations: progress.durations,
+          buildDir,
           project: {
             name: projectInfo?.name ?? null,
             version: projectInfo?.version ?? null,
@@ -75,7 +80,7 @@ export async function run(options: RunOptions): Promise<number> {
         importMap: await createResultImportMap(report, projectDir, modules.outdated),
       });
       await writeResultArtifacts(plan.outputDir, report, result);
-      const html = generateHtmlReport({ result, report, noData });
+      const html = generateHtmlReport({ result, durations: progress.durations, buildDir });
       let reportFile: string;
       try {
         reportFile = await writeReportFile(html, plan.config.outFile);

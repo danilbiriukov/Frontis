@@ -38,36 +38,44 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /shop-web/);
   assert.match(html, /v4\.12\.0/);
   assert.match(html, /Коммит недоступен/);
-  assert.doesNotMatch(html, /Ветка:/); // branch: null -> не отображается
-  assert.match(html, /Frontis v0\.1\.0/);
+  assert.deepEqual([...html.matchAll(/<dt>(Проект|Запуск|Коммит)<\/dt>/g)].map(([, label]) => label), [
+    'Проект', 'Запуск', 'Коммит',
+  ]);
+  assert.doesNotMatch(html, /<dt>Ветка<\/dt>/);
+  assert.match(html, /Версия 0\.1\.0/);
+  assert.match(html, /Code PushUp 0\.126\.4/);
 
   // Оценка проекта и счетчики
   assert.match(html, /score-card zone-yellow/);
-  assert.match(html, /<div class="score-value">60<\/div>/);
+  assert.match(html, /<span class="score-value number">60<\/span>/);
+  assert.match(html, /aria-label="Оценка проекта"[^>]+aria-valuenow="60"/);
   assert.match(html, /Требуются плановые работы/);
   assert.match(html, /Охват: 3 из 5 показателей/);
 
   // 4 счетчика
-  assert.match(html, /<div class="counter-count">1<\/div>\s*<div class="counter-label">Действий не требуется<\/div>/);
-  assert.match(html, /<div class="counter-count">1<\/div>\s*<div class="counter-label">Запланировать<\/div>/);
-  assert.match(html, /<div class="counter-count">1<\/div>\s*<div class="counter-label">Исправить<\/div>/);
-  assert.match(html, /<div class="counter-count">2<\/div>\s*<div class="counter-label">Нет данных<\/div>/);
+  const counters = [...html.matchAll(/<div class="counter-label">([^<]+)<\/div>.*\n\s*<div class="counter-count number">(\d+)<\/div>/g)];
+  assert.deepEqual(counters.map(([, label, count]) => [label, Number(count)]), [
+    ['Исправить', 1], ['Запланировать', 1], ['Действий не требуется', 1], ['Нет данных', 2],
+  ]);
 
   // Рекомендации
   assert.match(html, /Исправьте ошибки линтера\./);
   assert.match(html, /Доведите покрытие строк до цели тестами на непокрытые участки\./);
   assert.match(html, /badge-importance-high/);
   assert.match(html, /badge-importance-mid/);
+  assert.doesNotMatch(html, /От высокой важности к низкой\./);
 
-  // Таблица причин "Нет данных"
-  assert.match(html, /Причины отсутствия данных/);
-  assert.match(html, /В отчёте Code PushUp не хватает аудитов для проверки\./);
-  assert.match(html, /В проекте нет настроек Prettier\./);
+  const missing = html.match(/<section class="section" id="no-data-reasons"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(missing, /Показатели без данных/);
+  assert.match(missing, /class="availability-list"/);
+  assert.doesNotMatch(missing, /<table\b/);
+  assert.match(missing, /В отчёте Code PushUp не хватает аудитов для проверки\./);
+  assert.match(missing, /В проекте нет настроек Prettier\./);
 
   // Карточки показателей
   assert.match(html, /Неиспользуемый код/);
   assert.match(html, /Качество кода/);
-  assert.match(html, /Тесты и покрытие/);
+  assert.match(html, /Покрытие тестами/);
   assert.match(html, /Неполные данные/);
 
   // Детали находок ESLint
@@ -75,12 +83,164 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /src\/demo\.js:2/);
 
   // Автономность: системные шрифты, нет внешних запросов
-  assert.doesNotMatch(html, /https?:\/\//);
-  assert.doesNotMatch(html, /@import/);
+  const docsLink = '<a href="https://github.com/danilbiriukov/Frontis#readme">';
+  assert.ok(html.includes(docsLink));
+  assert.doesNotMatch(html.replace(docsLink, ''), /https?:\/\/|@import|url\(|<(?:img|link|script|iframe)\b/i);
 
   // Размер до 1 МБ
   const sizeBytes = Buffer.byteLength(html, 'utf8');
   assert.ok(sizeBytes < 1_000_000, `Размер HTML ${sizeBytes} превышает 1 МБ`);
+});
+
+test('ESLint и Prettier показывают свои находки в отдельных разделах', () => {
+  const result = structuredClone(fixtureResult);
+  const { checks } = result.indicators.find(({ id }) => id === 'codeQuality');
+  const lint = checks.find(({ id }) => id === 'lint');
+  lint.details.issues.unshift(
+    { message: 'Служебное сообщение', severity: 'info', audit: 'eslint/info' },
+    { message: 'Предупреждение линтера', severity: 'warning', audit: 'eslint/warning' },
+  );
+  const formatter = checks.find(({ id }) => id === 'prettier');
+  formatter.status = 'plan';
+  formatter.details = {
+    issues: [{ message: 'Нужно форматирование', severity: 'warning', source: { file: 'src/format-me.js' }, audit: 'frontis-prettier/unformatted-files' }],
+  };
+  const html = generateHtmlReport({ result });
+  const eslint = html.match(/<section class="section" id="eslint-findings"[\s\S]*?<\/section>/)[0];
+  const prettier = html.match(/<section class="section" id="prettier-findings"[\s\S]*?<\/section>/)[0];
+  const card = html.match(/id="indicator-codeQuality">[\s\S]*?<\/article>/)[0];
+
+  assert.match(eslint, /Линтер \(ESLint\)[\s\S]*src\/demo\.js:2/);
+  assert.doesNotMatch(eslint, /src\/format-me\.js/);
+  assert.match(prettier, /Форматирование \(Prettier\)[\s\S]*src\/format-me\.js/);
+  assert.doesNotMatch(prettier, /src\/demo\.js/);
+  assert.deepEqual([...eslint.matchAll(/data-severity="([^"]+)"/g)].map(([, severity]) => severity), ['error', 'warning', 'info']);
+  assert.match(eslint, /name="eslint-findings-severity" value="all" checked/);
+  assert.match(eslint, /name="eslint-findings-severity" value="error"/);
+  assert.deepEqual([...prettier.matchAll(/name="prettier-findings-severity" value="([^"]+)"/g)].map(([, value]) => value), ['all', 'error', 'warning', 'info']);
+  assert.match(prettier, /В списке HTML нет находок выбранного уровня\./);
+  const footer = card.match(/<footer class="card-footer card-actions">([\s\S]*?)<\/footer>/)[1];
+  assert.match(footer, /class="details-link" href="#eslint-findings">Подробности \(ESLint\)/);
+  assert.match(footer, /class="details-link" href="#prettier-findings">Подробности \(Prettier\)/);
+  assert.doesNotMatch(footer, /<code>|<span>/);
+  for (const section of [eslint, prettier]) {
+    assert.match(section, /class="tool-description"/);
+    assert.doesNotMatch(section, /<table\b|<thead\b/);
+    assert.match(section, /class="finding-icon" role="img"/);
+    const heading = section.split('<div class="findings-body">')[0];
+    assert.doesNotMatch(heading, /class="badge/);
+  }
+  assert.doesNotMatch(card, /class="check-header"|Линтер \(ESLint\)|Форматирование \(Prettier\)/);
+  assert.doesNotMatch(card, /src\/(demo|format-me)\.js/);
+});
+
+test('зависимости, покрытие и тесты показывают находки своих проверок отдельно', () => {
+  const result = structuredClone(fixtureResult);
+  for (const [id, pkg] of [['outdated', 'old-package'], ['audit', 'vulnerable-package']]) {
+    const indicator = result.indicators.find((item) => item.id === id);
+    const check = indicator.checks[0];
+    indicator.status = check.status = 'fix';
+    check.details = { issues: [{ audit: id, severity: 'error', message: 'Обновите пакет', package: pkg }] };
+  }
+  const coverage = result.indicators.find(({ id }) => id === 'coverage');
+  const tests = coverage.checks.find(({ id }) => id === 'tests');
+  tests.status = 'fix';
+  tests.facts = { passed: 8, failed: 1 };
+  coverage.findings.push({ kind: 'tests.failed', importance: 'high', now: '1', target: '0' });
+
+  const html = generateHtmlReport({ result });
+  const section = (id) => html.match(new RegExp(`<section class="section" id="${id}"[\\s\\S]*?</section>`))?.[0];
+  for (const [id, pkg] of [['outdated-findings', 'old-package'], ['audit-findings', 'vulnerable-package']]) {
+    assert.ok(section(id)?.includes(`<code class="finding-location">${pkg}</code>`));
+    assert.ok(html.includes(`href="#${id}"`));
+    assert.match(section(id), /class="tool-description"/);
+  }
+  const lcovSection = section('coverage-findings');
+  const testsSection = section('test-findings');
+  assert.match(lcovSection, /data-severity="warning"[\s\S]*Покрытие строк[\s\S]*90%/);
+  assert.doesNotMatch(lcovSection, /Тесты с ошибкой|metric-tiles/);
+  assert.match(testsSection, /data-severity="error"[\s\S]*Тесты с ошибкой/);
+  assert.doesNotMatch(testsSection, /Покрытие строк|Тестов пройдено|metric-tiles/);
+});
+
+test('отчёт без пропусков скрывает этот раздел и показывает находки Knip отдельно от счётчиков', () => {
+  const result = structuredClone(fixtureResult);
+  const unusedCode = result.indicators.find(({ id }) => id === 'unusedCode');
+  const knip = unusedCode.checks[0];
+  unusedCode.status = knip.status = 'fix';
+  knip.facts.files = 1;
+  knip.details = {
+    issues: [{ audit: 'frontis-knip/unused-files', severity: 'error', message: 'Неиспользуемый файл', source: { file: 'src/unused.ts' } }],
+  };
+  result.indicators = [unusedCode];
+  result.score = { value: null, zone: null, known: 1, total: 1 };
+  result.recommendations = [];
+
+  const html = generateHtmlReport({ result });
+  const card = html.match(/id="indicator-unusedCode">[\s\S]*?<\/article>/)?.[0] ?? '';
+  const findings = html.match(/id="knip-findings"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.doesNotMatch(html, /id="no-data-reasons"|class="overview-details"/);
+  assert.match(card, /class="metric-rows"[\s\S]*<dt>Файлов<\/dt><dd class="number">1<\/dd>/);
+  assert.match(card, /href="#knip-findings"/);
+  assert.doesNotMatch(card, /metric-tiles|src\/unused\.ts/);
+  assert.match(findings, /class="tool-description"[\s\S]*src\/unused\.ts/);
+  assert.match(findings, /name="knip-findings-severity" value="all" checked/);
+});
+
+test('карта импортов предшествует находкам Knip, а сборка и пропуски идут последними', () => {
+  const result = structuredClone(fixtureResult);
+  result.importMap = { status: 'ok', packages: [], scannedFiles: 0 };
+  result.indicators.push({
+    id: 'buildSize', status: 'ok', audits: [], findings: [],
+    checks: [{ id: 'build-size', status: 'ok', audits: [], facts: { sizeBytes: 28, files: 1, limitBytes: 1024 } }],
+  });
+
+  const html = generateHtmlReport({ result });
+  const lastSections = [...html.matchAll(/<section\b[^>]*\bid="([^"]+)"/g)].map(([, id]) => id).slice(-4);
+  assert.deepEqual(lastSections, ['import-map', 'knip-findings', 'no-data-reasons', 'indicator-buildSize']);
+});
+
+test('значения около порога не выглядят достигшими цели', () => {
+  const result = structuredClone(fixtureResult);
+  const coverage = result.indicators.find(({ id }) => id === 'coverage').checks.find(({ id }) => id === 'coverage');
+  coverage.facts.lines = 89.96;
+  coverage.facts.target = 90;
+  result.indicators.push({
+    id: 'buildSize', status: 'fix', audits: [], findings: [],
+    checks: [{ id: 'build-size', status: 'fix', audits: [], facts: { sizeBytes: 5_263_852, limitBytes: 5_242_880, files: 1 } }],
+  });
+
+  const html = generateHtmlReport({ result });
+  const coverageCard = html.match(/id="indicator-coverage">[\s\S]*?<\/article>/)?.[0] ?? '';
+  const buildSection = html.match(/id="indicator-buildSize">[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(coverageCard, /class="indicator-value number">89,9%<\/span>/);
+  assert.match(coverageCard, /aria-valuenow="89\.96"/);
+  assert.match(buildSection, /class="indicator-value number">5,02 МБ<\/span>/);
+  assert.match(buildSection, /Предел из конфига<\/dt><dd class="number">5 МБ<\/dd>/);
+});
+
+test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {
+  const result = structuredClone(fixtureResult);
+  const coverage = result.indicators.find(({ id }) => id === 'coverage');
+  coverage.status = 'fix';
+  coverage.checks.reverse();
+  const lcov = coverage.checks.find(({ id }) => id === 'coverage');
+  lcov.status = 'ok';
+  lcov.facts.lines = 94;
+  const html = generateHtmlReport({
+    result, durations: new Map([['coverage', 700], ['tests', 300]]),
+  });
+  const coverageCard = html.match(/id="indicator-coverage">([\s\S]+?)<\/article>/)[1];
+  assert.match(coverageCard, /class="meter status-ok"/);
+  assert.match(coverageCard, /aria-label="Покрытие строк"[^>]+aria-valuenow="94"/);
+  assert.match(coverageCard, /meter-warn" style="left:65%"/);
+  assert.match(coverageCard, /meter-target" style="left:90%"/);
+  assert.match(coverageCard, /Порог 65%/);
+  assert.match(coverageCard, /Цель 90%/);
+  assert.match(coverageCard, /class="metric-tile"><dt>Строки<\/dt><dd class="number">94%<\/dd>/);
+  assert.doesNotMatch(coverageCard, /class="details-link"|Покрытие кода \(LCOV\)|Итоги тестов \(Jest \/ Vitest\)/);
+  assert.match(coverageCard, /Jest \/ Vitest, LCOV<\/code><span>1 с/);
+  assert.match(html, /<footer class="card-footer card-actions"><a class="details-link" href="#audit-findings">Подробности \(npm audit\)<\/a><\/footer>/);
 });
 
 test('generateHtmlReport экранирует XSS-нагрузки в сообщениях и путях', () => {
@@ -143,7 +303,8 @@ test('generateHtmlReport ограничивает число находок де
   const html = generateHtmlReport({ result: resultWithManyIssues });
   assert.match(html, /Issue #10/);
   assert.doesNotMatch(html, /Issue #11/);
-  assert.match(html, /Показано 10 из 20000 находок/);
+  assert.match(html, /В разделе 10 из 20000 находок/);
+  assert.match(html, /Фильтр действует только на список в HTML/);
   assert.match(html, /Полный список.*report\.json/);
   assert.ok(Buffer.byteLength(html, 'utf8') < 1_000_000);
 });
@@ -194,7 +355,10 @@ test('generateHtmlReport без result формирует диагностиче
   assert.match(html, /Добавьте конфигурационный файл ESLint\./);
   assert.match(html, /logs\/lint\.log/);
   assert.match(html, /knip-not-installed/);
-  assert.doesNotMatch(html, /Оценка проекта<\/div>\s*<div class="score-value">\d+/);
+  assert.match(html, /score-card zone-none/);
+  assert.match(html, /class="score-value number">—<\/span>/);
+  assert.match(html, /Недостаточно данных для оценки\. Доступно 0 из 2 показателей/);
+  assert.doesNotMatch(html, /aria-label="Оценка проекта"/);
 });
 
 test('writeReportFile записывает HTML и создаёт промежуточные папки', async (t) => {

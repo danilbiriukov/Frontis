@@ -80,7 +80,7 @@ test('run без доступных аудитов возвращает 2 и с�
   assert.match(stdout, /Диагностический отчёт:.*report\.html/);
   const html = readFileSync(join(outputDir, 'report.html'), 'utf8');
   assert.doesNotMatch(html, /Предыдущий результат/);
-  assert.ok(html.includes(`Frontis v${version}`));
+  assert.ok(html.includes(`Версия ${version}`));
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
     outdated: 'no-package-json',
@@ -140,7 +140,10 @@ test('run собирает аудиты сборки вне Git и продол�
   const latest = reportSchema.parse(JSON.parse(readFileSync(join(outputDir, 'report.json'), 'utf8')));
   assert.notEqual(latest.date, report.date);
   assert.equal(latest.plugins[0].audits.find(({ slug }) => slug === 'size-bytes').value, 28);
-  assert.match(readFileSync(join(outputDir, 'report.html'), 'utf8'), /28 Б/);
+  const html = readFileSync(join(outputDir, 'report.html'), 'utf8');
+  const largest = html.match(/<div class="largest-files">[\s\S]*?<\/dl>/)?.[0] ?? '';
+  assert.match(largest, /Крупнейшие файлы \(1\)[\s\S]*index\.js[\s\S]*28 Б/);
+  assert.doesNotMatch(largest, /<(?:details|table)\b/);
 });
 
 test('run отклоняет outFile, занятый служебными файлами, до запуска проверок', (t) => {

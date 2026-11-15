@@ -160,7 +160,12 @@ test('отчёт строит карту из полных подтверждё�
   assert.equal(result.importMap.packages[0].imports.length, 11);
   const html = generateHtmlReport({ result });
   assert.match(html, /Места использования отстающих пакетов/);
-  assert.match(html, /zz-largest\/&lt;entry-0&gt;/);
+  assert.match(html, /aria-label="Таблица импортов отстающих пакетов" tabindex="0"/);
+  assert.match(html, /<th scope="col">Пакет<\/th>/);
+  const mapHtml = html.match(/<section class="section" id="import-map"[\s\S]*?<\/section>/)?.[0];
+  assert.doesNotMatch(mapHtml, /<details\b|<summary\b/);
+  assert.match(mapHtml, /<ul class="import-locations">[\s\S]*zz-largest\/&lt;entry-0&gt;/);
+  assert.match(mapHtml, /Показано 10 из 11/);
   assert.doesNotMatch(html, /<entry-|entry-10/);
   const noEvidence = { ...report, plugins: [{ slug: 'js-packages', audits: report.plugins[0].audits.slice(0, 2) }] };
   assert.equal((await createResultImportMap(noEvidence, projectDir, modules.outdated)).code, 'no-outdated-data');
