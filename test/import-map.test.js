@@ -160,6 +160,9 @@ test('отчёт строит карту из полных подтверждё�
   assert.equal(result.importMap.packages[0].imports.length, 11);
   const html = generateHtmlReport({ result });
   assert.match(html, /Места использования отстающих пакетов/);
+  assert.match(html, /aria-label="Таблица импортов отстающих пакетов" tabindex="0"/);
+  assert.match(html, /<th scope="col">Пакет<\/th>/);
+  assert.match(html, /<summary aria-label="Импорты zz-largest: 11">Найдено: 11<\/summary>/);
   assert.match(html, /zz-largest\/&lt;entry-0&gt;/);
   assert.doesNotMatch(html, /<entry-|entry-10/);
   const noEvidence = { ...report, plugins: [{ slug: 'js-packages', audits: report.plugins[0].audits.slice(0, 2) }] };

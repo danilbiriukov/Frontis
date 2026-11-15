@@ -63,6 +63,7 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /Доведите покрытие строк до цели тестами на непокрытые участки\./);
   assert.match(html, /badge-importance-high/);
   assert.match(html, /badge-importance-mid/);
+  assert.doesNotMatch(html, /От высокой важности к низкой\./);
 
   // Таблица причин "Нет данных"
   assert.match(html, /Показатели без данных/);
@@ -87,6 +88,28 @@ test('generateHtmlReport собирает полный автономный HTML
   // Размер до 1 МБ
   const sizeBytes = Buffer.byteLength(html, 'utf8');
   assert.ok(sizeBytes < 1_000_000, `Размер HTML ${sizeBytes} превышает 1 МБ`);
+});
+
+test('ESLint и Prettier показывают свои находки в отдельных разделах', () => {
+  const result = structuredClone(fixtureResult);
+  const { checks } = result.indicators.find(({ id }) => id === 'codeQuality');
+  const formatter = checks.find(({ id }) => id === 'prettier');
+  formatter.status = 'plan';
+  formatter.details = {
+    issues: [{ message: 'Нужно форматирование', severity: 'warning', source: { file: 'src/format-me.js' }, audit: 'frontis-prettier/unformatted-files' }],
+  };
+  const html = generateHtmlReport({ result });
+  const eslint = html.match(/<section class="section" id="eslint-findings"[\s\S]*?<\/section>/)[0];
+  const prettier = html.match(/<section class="section" id="prettier-findings"[\s\S]*?<\/section>/)[0];
+  const card = html.match(/id="indicator-codeQuality">[\s\S]*?<\/article>/)[0];
+
+  assert.match(eslint, /Линтер \(ESLint\)[\s\S]*src\/demo\.js:2/);
+  assert.doesNotMatch(eslint, /src\/format-me\.js/);
+  assert.match(prettier, /Форматирование \(Prettier\)[\s\S]*src\/format-me\.js/);
+  assert.doesNotMatch(prettier, /src\/demo\.js/);
+  assert.match(card, /href="#eslint-findings"/);
+  assert.match(card, /href="#prettier-findings"/);
+  assert.doesNotMatch(card, /src\/(demo|format-me)\.js/);
 });
 
 test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {

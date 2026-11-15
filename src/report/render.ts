@@ -192,7 +192,6 @@ function renderRecommendations({ recommendations, indicators }: FrontisResult): 
   <section class="section" id="recommendations">
     <div class="section-heading">
       <h2 class="section-title">Рекомендации</h2>
-      ${rows === '' ? '' : '<p class="section-note">От высокой важности к низкой.</p>'}
     </div>
     ${rows === '' ? '<p class="empty-state">По доступным данным рекомендаций нет.</p>' : `
     <div class="table-wrapper" role="region" aria-label="Таблица рекомендаций" tabindex="0">
@@ -263,8 +262,10 @@ function renderNoDataTable(indicators: IResultIndicator[]): string {
   </section>`;
 }
 
-function renderIssues(issues: IResultIssue[]): string {
-  if (issues.length === 0) return '';
+function renderIssues(issues: IResultIssue[], sectionTitle?: string): string {
+  if (issues.length === 0) {
+    return '';
+  }
   const total = issues.length;
   const sliced = issues.slice(0, MAX_LIST_ITEMS);
 
@@ -285,17 +286,14 @@ function renderIssues(issues: IResultIssue[]): string {
     ? `<div class="limit-note">${total > MAX_LIST_ITEMS ? `Показано ${MAX_LIST_ITEMS} из ${total} находок. ` : ''}Полный список аудитов и находок в report.json.</div>`
     : '';
 
-  return `
-  <details>
-    <summary>Находки (${total})</summary>
-    <div class="details-content">
-      <div class="table-wrapper">
-        <table class="issues-table">
+  const table = `
+      <div class="table-wrapper"${sectionTitle ? ` role="region" aria-label="Находки: ${escapeHtml(sectionTitle)}" tabindex="0"` : ''}>
+        <table${sectionTitle ? ' class="summary-table"' : ''}>
           <thead>
             <tr>
-              <th style="width: 90px;">Уровень</th>
-              <th style="width: 260px;">Файл</th>
-              <th>Сообщение</th>
+              <th scope="col">Уровень</th>
+              <th scope="col">Файл</th>
+              <th scope="col">Сообщение</th>
             </tr>
           </thead>
           <tbody>
@@ -303,8 +301,12 @@ function renderIssues(issues: IResultIssue[]): string {
           </tbody>
         </table>
       </div>
-      ${limitNote}
-    </div>
+      ${limitNote}`;
+
+  return sectionTitle ? table : `
+  <details>
+    <summary>Находки (${total})</summary>
+    <div class="details-content">${table}</div>
   </details>`;
 }
 
@@ -492,27 +494,68 @@ function renderStatus(status: IResultCheck['status']): string {
   return `<span class="badge badge-${escapeHtml(status)}">${renderStatusIcon(status)}${STATUS_LABELS[status]}</span>`;
 }
 
-function renderCheck(check: IResultCheck, showStatus: boolean): string {
-  const { id, status, reason, action, code, logFile, details, incomplete } = check;
+const findingsSectionIds: Partial<Record<IResultCheck['id'], string>> = {
+  lint: 'eslint-findings',
+  prettier: 'prettier-findings',
+};
+
+function renderCheckProblem({ id, status, reason, action, code, logFile, incomplete }: IResultCheck): string {
   const showReason = (status === 'no-data' || status === 'disabled' || incomplete) && reason;
+  if (!showReason) {
+    return '';
+  }
   const diagnosis = logFile
     ? `<div class="check-diagnostic"><code>${escapeHtml(checkSources[id])} · ${escapeHtml(code)}</code><span>Журнал: <code>${escapeHtml(logFile)}</code></span></div>`
     : '';
-  const body = showReason
-    ? `<div class="callout"><p class="callout-title">${escapeHtml(reason)}</p>${action ? `<p class="callout-action">${escapeHtml(action)}</p>` : ''}</div>${diagnosis}`
-    : '';
+  return `<div class="callout"><p class="callout-title">${escapeHtml(reason)}</p>${action ? `<p class="callout-action">${escapeHtml(action)}</p>` : ''}</div>${diagnosis}`;
+}
+
+function renderCheck(check: IResultCheck, showStatus: boolean, showFindingsSections: boolean): string {
+  const { id, status, details } = check;
+  const sectionId = showFindingsSections ? findingsSectionIds[id] : undefined;
+  const body = renderCheckProblem(check);
   const detail = [
-    details?.issues ? renderIssues(details.issues) : '',
+    sectionId === undefined && details?.issues ? renderIssues(details.issues) : '',
     details?.largestFiles ? renderLargestFiles(details.largestFiles) : '',
-    details?.rules ? renderRules(details.rules) : '',
+    sectionId === undefined && details?.rules ? renderRules(details.rules) : '',
   ].join('');
-  if (!showStatus && body === '' && detail === '') {
+  const link = sectionId && (details?.issues?.length || details?.rules?.length)
+    ? `<p><a href="#${sectionId}">Находки ${escapeHtml(checkSources[id])}</a></p>`
+    : '';
+  if (!showStatus && body === '' && detail === '' && link === '') {
     return '';
   }
   const heading = showStatus
     ? `<div class="check-header"><span class="check-title">${escapeHtml(CHECK_TITLES[id])}</span>${renderStatus(status)}</div>`
     : '';
-  return `<div class="check-item">${heading}${body}${detail}</div>`;
+  return `<div class="check-item">${heading}${body}${detail}${link}</div>`;
+}
+
+function renderCodeQualityFindings(result: FrontisResult): string {
+  const checks = result.indicators.find(({ id }) => id === 'codeQuality')?.checks ?? [];
+  return (['lint', 'prettier'] as const).map((id) => {
+    const check = checks.find((item) => item.id === id);
+    if (check === undefined) {
+      return '';
+    }
+    const sectionId = findingsSectionIds[id];
+    const title = CHECK_TITLES[id];
+    const problem = renderCheckProblem(check);
+    const findings = renderIssues(check.details?.issues ?? [], title);
+    const rules = renderRules(check.details?.rules ?? []);
+    const empty = check.status === 'no-data' || check.status === 'disabled' ? 'Данные о находках недоступны.' : 'Находок нет.';
+    return `<section class="section" id="${sectionId}" aria-labelledby="${sectionId}-title">
+      <div class="section-heading">
+        <h2 class="section-title" id="${sectionId}-title">${escapeHtml(title)}</h2>
+        ${renderStatus(check.status)}
+      </div>
+      <div class="findings-body">
+        ${problem}
+        ${findings || (problem === '' ? `<p class="empty-state">${empty}</p>` : '')}
+        ${rules}
+      </div>
+    </section>`;
+  }).join('');
 }
 
 function renderIndicators(indicators: readonly IResultIndicator[], options: GenerateReportOptions): string {
@@ -530,7 +573,7 @@ function renderIndicators(indicators: readonly IResultIndicator[], options: Gene
     const duration = sumKnown(...active.map((check) => options.durations?.get(check.id)));
     const sources = active.map((check) => check.id === 'build-size' ? options.buildDir ?? checkSources[check.id] : checkSources[check.id]);
     const elapsed = formatDuration(duration);
-    const checksHtml = checks.map((check) => renderCheck(check, checks.length > 1)).join('');
+    const checksHtml = checks.map((check) => renderCheck(check, checks.length > 1, options.result !== undefined)).join('');
     const fallback = status === 'no-data' && checksHtml === '' && indicator.reason
       ? `<div class="callout"><p>${escapeHtml(indicator.reason)}</p><p class="callout-action">${escapeHtml(indicator.action)}</p></div>`
       : '';
@@ -564,25 +607,44 @@ function renderImportMap(map: FrontisResult['importMap']): string {
   }
   let content: string;
   if (map.status === 'no-data') {
-    content = `<p><strong>${STATUS_LABELS['no-data']}</strong>. ${escapeHtml(map.reason)} ${escapeHtml(map.action)}</p>`;
+    content = `<div class="callout">
+      <p class="callout-title">${escapeHtml(map.reason)}</p>
+      <p class="callout-action">${escapeHtml(map.action)}</p>
+    </div>`;
   } else if (map.packages.length === 0) {
-    content = '<p>Отстающих пакетов нет.</p>';
+    content = '<p class="empty-state">Отстающих пакетов нет.</p>';
   } else {
-    content = map.packages.map(({ name, current, latest, imports }) => {
+    const rows = map.packages.map(({ name, current, latest, imports }) => {
       const locations = imports.slice(0, MAX_LIST_ITEMS).map(({ file, line, specifier }) =>
-        `<li><code>${escapeHtml(file)}:${escapeHtml(line)}</code> <code>${escapeHtml(specifier)}</code></li>`,
+        `<li><code>${escapeHtml(file)}:${escapeHtml(line)}</code> <code class="import-specifier">${escapeHtml(specifier)}</code></li>`,
       ).join('');
       const more = imports.length > MAX_LIST_ITEMS
-        ? `<p>Показано ${MAX_LIST_ITEMS} из ${imports.length}. Полный список в <code>result.json</code>.</p>`
+        ? `<p class="limit-note">Показано ${MAX_LIST_ITEMS} из ${imports.length}. Полный список в <code>result.json</code>.</p>`
         : '';
-      return `<details>
-        <summary><code>${escapeHtml(name)}</code> ${escapeHtml(current)} → ${escapeHtml(latest)} (${imports.length})</summary>
-        <div class="details-content">${locations === '' ? '<p>Импорты не найдены.</p>' : `<ul>${locations}</ul>${more}`}</div>
-      </details>`;
+      return `<tr>
+        <td><strong><code>${escapeHtml(name)}</code></strong></td>
+        <td class="cell-now"><code>${escapeHtml(current)}</code></td>
+        <td class="cell-target"><code>${escapeHtml(latest)}</code></td>
+        <td>${locations === '' ? '<span class="empty-state">Импорты не найдены.</span>' : `<details>
+          <summary aria-label="Импорты ${escapeHtml(name)}: ${imports.length}">Найдено: ${imports.length}</summary>
+          <div class="details-content"><ul>${locations}</ul>${more}</div>
+        </details>`}</td>
+      </tr>`;
     }).join('');
+    content = `<div class="table-wrapper" role="region" aria-label="Таблица импортов отстающих пакетов" tabindex="0">
+      <table class="summary-table">
+        <thead>
+          <tr><th scope="col">Пакет</th><th scope="col" class="column-number">Сейчас</th><th scope="col" class="column-number">Доступно</th><th scope="col">Импорты</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
   }
-  return `<section class="section" id="import-map">
-    <h2 class="section-title">Места использования отстающих пакетов</h2>
+  return `<section class="section" id="import-map" aria-labelledby="import-map-title">
+    <div class="section-heading">
+      <h2 class="section-title" id="import-map-title">Места использования отстающих пакетов</h2>
+      ${map.status === 'no-data' ? renderStatus('no-data') : ''}
+    </div>
     ${content}
   </section>`;
 }
@@ -659,6 +721,7 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
       ${renderScoreAndCounters(score, indicators)}
       ${result ? renderRecommendations(result) + renderNoDataTable(result.indicators) : renderDiagnostics(noData)}
       ${renderIndicators(indicators, options)}
+      ${result ? renderCodeQualityFindings(result) : ''}
       ${renderImportMap(result?.importMap)}
     </main>
     ${renderFooter(version, engineVersion, duration)}

@@ -150,7 +150,7 @@ test('npm сохраняет официальные аудиты и считае
     ['lib-major', [{ file: 'entry.js', line: 1, specifier: 'lib-major/subpath' }]],
     ['dev-patch', [{ file: 'entry.js', line: 2, specifier: 'dev-patch' }]],
   ]);
-  assert.match(await readFile(join(dir, '.frontis/report.html'), 'utf8'), /<code>lib-major\/subpath<\/code>/);
+  assert.match(await readFile(join(dir, '.frontis/report.html'), 'utf8'), /<code[^>]*>lib-major\/subpath<\/code>/);
   assert(requests.includes('lib-current'));
   assert(!requests.includes('lib-local'));
 });

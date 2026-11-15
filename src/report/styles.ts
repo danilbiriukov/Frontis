@@ -38,15 +38,14 @@ h1 { font-size: clamp(25px, 5vw, 32px); line-height: 1.16; font-weight: 680; }
 .diagnostic-notice { color: var(--secondary); margin-bottom: 14px; }
 .header-meta { margin-top: 18px; display: grid; gap: 4px; }
 .meta-item { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; font-size: 13px; }
-.meta-item dt, .section-note, .score-coverage, .score-zone { color: var(--secondary); }
+.meta-item dt, .score-coverage, .score-zone { color: var(--secondary); }
 .meta-value { min-width: 0; overflow-wrap: anywhere; }
 
 .section, .overview-grid { padding: 24px 26px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
 .section, .instrument-section { margin-top: 24px; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 16px; }
 .section-title { font-size: 18px; line-height: 1.25; font-weight: 650; }
-.section-note, .empty-state { font-size: 13px; }
-.empty-state { color: var(--secondary); }
+.empty-state { color: var(--secondary); font-size: 13px; }
 
 .overview-grid { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(0, 3.2fr); gap: 30px; }
 .score-card { border-inline-end: 1px solid var(--line); padding-inline-end: 30px; }
@@ -92,6 +91,9 @@ td strong, .cell-now { color: var(--ink); }
 .cell-now, .cell-target, .column-number { text-align: center; white-space: nowrap; }
 .cell-now { font-weight: 680; }
 .code-path { font-family: var(--mono); font-size: 12px; }
+.import-specifier { color: var(--secondary); }
+.findings-body { display: grid; gap: 8px; }
+.findings-body td .badge { white-space: nowrap; }
 
 .indicators-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 20px; }
 .indicator-card { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 20px 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
