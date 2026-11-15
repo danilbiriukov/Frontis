@@ -30,7 +30,7 @@
     "@types/semver": "7.8.0",
     "knip": "6.45.1",
     "oxlint": "1.91.0",
-    "prettier": "3.9.10",
+    "prettier": "3.10.0",
     "typescript": "7.0.2"
   },
   "dependencies": {
