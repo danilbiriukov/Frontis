@@ -93,6 +93,11 @@ test('generateHtmlReport собирает полный автономный HTML
 test('ESLint и Prettier показывают свои находки в отдельных разделах', () => {
   const result = structuredClone(fixtureResult);
   const { checks } = result.indicators.find(({ id }) => id === 'codeQuality');
+  const lint = checks.find(({ id }) => id === 'lint');
+  lint.details.issues.unshift(
+    { message: 'Служебное сообщение', severity: 'info', audit: 'eslint/info' },
+    { message: 'Предупреждение линтера', severity: 'warning', audit: 'eslint/warning' },
+  );
   const formatter = checks.find(({ id }) => id === 'prettier');
   formatter.status = 'plan';
   formatter.details = {
@@ -107,14 +112,19 @@ test('ESLint и Prettier показывают свои находки в отд�
   assert.doesNotMatch(eslint, /src\/format-me\.js/);
   assert.match(prettier, /Форматирование \(Prettier\)[\s\S]*src\/format-me\.js/);
   assert.doesNotMatch(prettier, /src\/demo\.js/);
+  assert.deepEqual([...eslint.matchAll(/data-severity="([^"]+)"/g)].map(([, severity]) => severity), ['error', 'warning', 'info']);
+  assert.match(eslint, /name="eslint-findings-severity" value="all" checked/);
+  assert.match(eslint, /name="eslint-findings-severity" value="error"/);
+  assert.deepEqual([...prettier.matchAll(/name="prettier-findings-severity" value="([^"]+)"/g)].map(([, value]) => value), ['all', 'error', 'warning', 'info']);
+  assert.match(prettier, /По выбранному уровню находок нет\./);
   const footer = card.match(/<footer class="card-footer card-actions">([\s\S]*?)<\/footer>/)[1];
   assert.match(footer, /class="details-link" href="#eslint-findings">Подробности \(ESLint\)/);
   assert.match(footer, /class="details-link" href="#prettier-findings">Подробности \(Prettier\)/);
   assert.doesNotMatch(footer, /<code>|<span>/);
   for (const section of [eslint, prettier]) {
     assert.match(section, /class="tool-description"/);
-    assert.match(section, /class="summary-table findings-table"/);
-    assert.match(section, /class="badge issue-icon[^"]*" role="img"/);
+    assert.doesNotMatch(section, /<table\b|<thead\b/);
+    assert.match(section, /class="finding-icon" role="img"/);
     const heading = section.split('<div class="findings-body">')[0];
     assert.doesNotMatch(heading, /class="badge/);
   }
@@ -139,14 +149,15 @@ test('зависимости, покрытие и тесты показываю�
   const html = generateHtmlReport({ result });
   const section = (id) => html.match(new RegExp(`<section class="section" id="${id}"[\\s\\S]*?</section>`))?.[0];
   for (const [id, pkg] of [['outdated-findings', 'old-package'], ['audit-findings', 'vulnerable-package']]) {
-    assert.ok(section(id)?.includes(`<td class="code-path">${pkg}</td>`));
+    assert.ok(section(id)?.includes(`<code class="finding-location">${pkg}</code>`));
     assert.ok(html.includes(`href="#${id}"`));
     assert.match(section(id), /class="tool-description"/);
   }
-  assert.match(section('coverage-findings'), /Покрытие строк[\s\S]*90%/);
-  assert.doesNotMatch(section('coverage-findings'), /Тесты с ошибкой/);
-  assert.match(section('test-findings'), /Тестов пройдено[\s\S]*Тесты с ошибкой/);
-  assert.doesNotMatch(section('test-findings'), /Покрытие строк/);
+  const toolCard = (id) => html.match(new RegExp(`<article class="indicator-card [^"]+" id="${id}"[\\s\\S]*?</article>`))?.[0];
+  assert.match(toolCard('coverage-findings'), /Покрытие строк[\s\S]*90%/);
+  assert.doesNotMatch(toolCard('coverage-findings'), /Тесты с ошибкой/);
+  assert.match(toolCard('test-findings'), /Тестов пройдено[\s\S]*Тесты с ошибкой/);
+  assert.doesNotMatch(toolCard('test-findings'), /Покрытие строк/);
 });
 
 test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {
@@ -232,7 +243,7 @@ test('generateHtmlReport ограничивает число находок де
   const html = generateHtmlReport({ result: resultWithManyIssues });
   assert.match(html, /Issue #10/);
   assert.doesNotMatch(html, /Issue #11/);
-  assert.match(html, /Показано 10 из 20000 находок/);
+  assert.match(html, /В разделе 10 из 20000 находок/);
   assert.match(html, /Полный список.*report\.json/);
   assert.ok(Buffer.byteLength(html, 'utf8') < 1_000_000);
 });

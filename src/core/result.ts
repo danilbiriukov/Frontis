@@ -6,6 +6,7 @@ import { ESLINT_CHECKED_FILES, ESLINT_PARSE_ERRORS } from '../plugins/eslint-evi
 import { OUTDATED_EVIDENCE_AUDIT } from '../plugins/js-packages-contract.js';
 import type { ModuleName, ResolvedModuleConfig, Thresholds } from './config.js';
 import type { Finding } from './importance.js';
+import { compareIssueSeverity } from './issue-severity.js';
 import type { PluginProblem } from './plugin-guard.js';
 import { buildRecommendations } from './recommendations.js';
 import {
@@ -564,7 +565,7 @@ function createCheck(id: TCheckId, evidence: ICheckEvidence, context: IResultCon
   const rules = evidence.details?.rules ?? [];
   if (entries.length > 0 || largestFiles.length > 0 || rules.length > 0) {
     check.details = {
-      ...(entries.length > 0 ? { issues: entries.slice(0, 10) } : {}),
+      ...(entries.length > 0 ? { issues: [...entries].sort(compareIssueSeverity).slice(0, 10) } : {}),
       ...(largestFiles.length > 0 ? { largestFiles } : {}),
       ...(rules.length > 0 ? { rules } : {}),
     };

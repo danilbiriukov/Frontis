@@ -225,6 +225,17 @@ test('неизвестное сообщение npm audit сохраняет в�
   }]);
 });
 
+test('ошибки и предупреждения попадают в краткий результат раньше сведений', () => {
+  const info = Array.from({ length: 10 }, (_, i) => ({ message: `Сведение ${i + 1}`, severity: 'info' }));
+  const warning = { message: 'Предупреждение', severity: 'warning' };
+  const error = { message: 'Ошибка', severity: 'error' };
+  const report = withNpmAudit([...info, warning, error], []);
+  const { details } = check(createResult(report, context()), 'audit');
+  assert.deepEqual(details.issues.map(({ message }) => message), [
+    error.message, warning.message, ...info.slice(0, 8).map(({ message }) => message),
+  ]);
+});
+
 test('успешные нули npm audit учитываются в оценке, сбой реестра сохраняет отдельную причину', () => {
   const clean = createResult(withNpmAudit([], []), context());
   assert.equal(indicator(clean, 'audit').status, 'ok');
