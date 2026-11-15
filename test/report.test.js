@@ -118,7 +118,7 @@ test('ESLint и Prettier показывают свои находки в отд�
   assert.match(eslint, /name="eslint-findings-severity" value="all" checked/);
   assert.match(eslint, /name="eslint-findings-severity" value="error"/);
   assert.deepEqual([...prettier.matchAll(/name="prettier-findings-severity" value="([^"]+)"/g)].map(([, value]) => value), ['all', 'error', 'warning', 'info']);
-  assert.match(prettier, /По выбранному уровню находок нет\./);
+  assert.match(prettier, /В списке HTML нет находок выбранного уровня\./);
   const footer = card.match(/<footer class="card-footer card-actions">([\s\S]*?)<\/footer>/)[1];
   assert.match(footer, /class="details-link" href="#eslint-findings">Подробности \(ESLint\)/);
   assert.match(footer, /class="details-link" href="#prettier-findings">Подробности \(Prettier\)/);
@@ -185,6 +185,38 @@ test('отчёт без пропусков скрывает этот разде�
   assert.doesNotMatch(card, /metric-tiles|src\/unused\.ts/);
   assert.match(findings, /class="tool-description"[\s\S]*src\/unused\.ts/);
   assert.match(findings, /name="knip-findings-severity" value="all" checked/);
+});
+
+test('карта импортов предшествует находкам Knip, а сборка и пропуски идут последними', () => {
+  const result = structuredClone(fixtureResult);
+  result.importMap = { status: 'ok', packages: [], scannedFiles: 0 };
+  result.indicators.push({
+    id: 'buildSize', status: 'ok', audits: [], findings: [],
+    checks: [{ id: 'build-size', status: 'ok', audits: [], facts: { sizeBytes: 28, files: 1, limitBytes: 1024 } }],
+  });
+
+  const html = generateHtmlReport({ result });
+  const lastSections = [...html.matchAll(/<section\b[^>]*\bid="([^"]+)"/g)].map(([, id]) => id).slice(-4);
+  assert.deepEqual(lastSections, ['import-map', 'knip-findings', 'no-data-reasons', 'indicator-buildSize']);
+});
+
+test('значения около порога не выглядят достигшими цели', () => {
+  const result = structuredClone(fixtureResult);
+  const coverage = result.indicators.find(({ id }) => id === 'coverage').checks.find(({ id }) => id === 'coverage');
+  coverage.facts.lines = 89.96;
+  coverage.facts.target = 90;
+  result.indicators.push({
+    id: 'buildSize', status: 'fix', audits: [], findings: [],
+    checks: [{ id: 'build-size', status: 'fix', audits: [], facts: { sizeBytes: 5_263_852, limitBytes: 5_242_880, files: 1 } }],
+  });
+
+  const html = generateHtmlReport({ result });
+  const coverageCard = html.match(/id="indicator-coverage">[\s\S]*?<\/article>/)?.[0] ?? '';
+  const buildSection = html.match(/id="indicator-buildSize">[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(coverageCard, /class="indicator-value number">89,9%<\/span>/);
+  assert.match(coverageCard, /aria-valuenow="89\.96"/);
+  assert.match(buildSection, /class="indicator-value number">5,02 МБ<\/span>/);
+  assert.match(buildSection, /Предел из конфига<\/dt><dd class="number">5 МБ<\/dd>/);
 });
 
 test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {
@@ -272,6 +304,7 @@ test('generateHtmlReport ограничивает число находок де
   assert.match(html, /Issue #10/);
   assert.doesNotMatch(html, /Issue #11/);
   assert.match(html, /В разделе 10 из 20000 находок/);
+  assert.match(html, /Фильтр действует только на список в HTML/);
   assert.match(html, /Полный список.*report\.json/);
   assert.ok(Buffer.byteLength(html, 'utf8') < 1_000_000);
 });

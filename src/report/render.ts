@@ -2,6 +2,7 @@ import type { Report } from '@code-pushup/models';
 import { compareIssueSeverity, ISSUE_SEVERITIES, issueSeverity } from '../core/issue-severity.js';
 import { codePushUpPackage, frontisVersion } from '../core/package-info.js';
 import type { PluginNoData } from '../core/plugin-guard.js';
+import { formatLineCoverage } from '../core/rules.js';
 import type { FrontisResult, IResultCheck, IResultIndicator, IResultIssue } from '../core/types/result.js';
 import { escapeHtml } from './escape.js';
 import {
@@ -33,6 +34,7 @@ export interface GenerateReportOptions {
 const MAX_LIST_ITEMS = 10;
 
 const decimals = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1, useGrouping: 'always' });
+const morePrecise = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, useGrouping: 'always' });
 
 function formatDateTime(isoString: string): string {
   const date = new Date(isoString);
@@ -56,14 +58,27 @@ function formatDuration(durationMs?: number): string {
   return `${Math.floor(seconds / 60)} мин ${seconds % 60} с`;
 }
 
-function formatBytes(bytes: number): string {
+function formatBytes(bytes: number, numberFormat = decimals): string {
   if (bytes < 1024) {
     return `${bytes} Б`;
   }
   if (bytes < 1024 * 1024) {
-    return `${decimals.format(bytes / 1024)} КБ`;
+    return `${numberFormat.format(bytes / 1024)} КБ`;
   }
-  return `${decimals.format(bytes / (1024 * 1024))} МБ`;
+  return `${numberFormat.format(bytes / (1024 * 1024))} МБ`;
+}
+
+function formatBuildSize(size?: number, limit?: number): [string | undefined, string | undefined] {
+  const value = size === undefined ? undefined : formatBytes(size);
+  const threshold = limit === undefined ? undefined : formatBytes(limit);
+  if (size === undefined || limit === undefined || size === limit || value !== threshold) {
+    return [value, threshold];
+  }
+  const preciseValue = formatBytes(size, morePrecise);
+  const preciseThreshold = formatBytes(limit, morePrecise);
+  return preciseValue === preciseThreshold
+    ? [`${decimals.format(size)} Б`, `${decimals.format(limit)} Б`]
+    : [preciseValue, preciseThreshold];
 }
 
 function renderHeader(project: NonNullable<GenerateReportOptions['project']>, runAt: string): string {
@@ -291,7 +306,7 @@ function renderIssues(issues: IResultIssue[], sectionId?: string, reference: 'fi
   }).join('');
 
   const limitNote = total >= MAX_LIST_ITEMS
-    ? `<div class="limit-note">${total > MAX_LIST_ITEMS ? `В разделе ${MAX_LIST_ITEMS} из ${total} находок. ` : ''}Полный список аудитов и находок в report.json.</div>`
+    ? `<div class="limit-note">${total > MAX_LIST_ITEMS ? `В разделе ${MAX_LIST_ITEMS} из ${total} находок. ` : ''}${sectionId === undefined ? '' : 'Фильтр действует только на список в HTML. '}Полный список аудитов и находок в report.json.</div>`
     : '';
 
   const list = `<ul class="finding-list" role="list">${rows}</ul>`;
@@ -299,7 +314,7 @@ function renderIssues(issues: IResultIssue[], sectionId?: string, reference: 'fi
     return `<div class="issue-panel">
       ${renderIssueFilter(sectionId)}
       ${list}
-      <p class="filter-empty empty-state">По выбранному уровню находок нет.</p>
+      <p class="filter-empty empty-state">В списке HTML нет находок выбранного уровня.</p>
       ${limitNote}
     </div>`;
   }
@@ -334,7 +349,7 @@ function renderRules(rules: { rule: string; count: number }[]): string {
 
 const checkSources: Record<IResultCheck['id'], string> = {
   outdated: 'npm outdated', audit: 'npm audit', knip: 'knip', lint: 'ESLint', prettier: 'Prettier',
-  coverage: 'LCOV', tests: 'Jest / Vitest', 'node-version': '.nvmrc / engines.node, nodejs.org', 'build-size': 'Каталог сборки',
+  coverage: 'LCOV', tests: 'Jest / Vitest', 'node-version': '.nvmrc / .node-version / engines.node, nodejs.org', 'build-size': 'Каталог сборки',
 };
 
 const indicatorChecks = {
@@ -407,9 +422,10 @@ function indicatorMetrics(indicator: IResultIndicator): {
       };
     case 'coverage': {
       const lines = n('lines');
+      const formattedLines = lines === undefined ? undefined : formatLineCoverage(lines);
       return {
-        value: formatPercent(lines),
-        tiles: [['Строки', formatPercent(lines)], ['Ветви', formatPercent(n('branches'))], ['Функции', formatPercent(n('functions'))]],
+        value: formattedLines,
+        tiles: [['Строки', formattedLines], ['Ветви', formatPercent(n('branches'))], ['Функции', formatPercent(n('functions'))]],
         scale: lines === undefined ? '' : renderMeter('Покрытие строк', lines, {
           warn: n('warn'), target: n('target'), status: primary?.status,
         }),
@@ -446,11 +462,10 @@ function indicatorMetrics(indicator: IResultIndicator): {
         ],
       };
     case 'buildSize': {
-      const size = n('sizeBytes');
-      const limit = n('limitBytes');
+      const [value, limit] = formatBuildSize(n('sizeBytes'), n('limitBytes'));
       return {
-        value: size === undefined ? undefined : formatBytes(size),
-        rows: [['Файлов в сборке', n('files')], ['Предел из конфига', limit === undefined ? undefined : formatBytes(limit)]],
+        value,
+        rows: [['Файлов в сборке', n('files')], ['Предел из конфига', limit]],
       };
     }
   }
@@ -724,6 +739,7 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
   const engineVersion = result?.report.codePushUpVersion ?? options.report?.version ?? codePushUpPackage().version;
   const noData = options.noData ?? [];
   const indicators = result?.indicators ?? diagnosticIndicators(noData);
+  const knip = indicators.find(({ id }) => id === 'unusedCode');
   const score = result?.score ?? { value: null, zone: null, known: 0, total: indicators.length };
   const title = result ? project.name || 'Аудит проекта' : 'Диагностический отчёт';
 
@@ -743,10 +759,11 @@ export function generateHtmlReport(options: GenerateReportOptions): string {
       ${result ? '' : '<p class="diagnostic-notice">Диагностический отчёт. Проверки не дали пригодных аудитов.</p>'}
       ${renderScoreAndCounters(score, indicators)}
       ${result ? renderRecommendations(result) : renderDiagnostics(noData)}
-      ${renderOverviewDetails(indicators, options)}
       ${renderIndicators(indicators, options)}
-      ${renderFindingsSections(indicators)}
+      ${renderFindingsSections(indicators.filter(({ id }) => id !== 'unusedCode'))}
       ${renderImportMap(result?.importMap)}
+      ${knip === undefined ? '' : renderFindingsSections([knip])}
+      ${renderOverviewDetails(indicators, options)}
     </main>
     ${renderFooter(version, engineVersion, duration)}
   </div>

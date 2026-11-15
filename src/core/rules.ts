@@ -192,6 +192,10 @@ export function unusedCodeFindings(counts: UnusedCodeCounts): Finding[] {
   ]);
 }
 
+export function formatLineCoverage(linesPercent: number): string {
+  return `${numberFormat.format(tenthsDown(linesPercent))}%`;
+}
+
 /**
  * Покрытие тестами. Находка создаётся только по строкам: ветви, функции
  * и инструкции остаются детализацией в карточке модуля.
@@ -204,7 +208,7 @@ export function coverageFindings(linesPercent: number, thresholds: Thresholds['c
       module: 'coverage',
       metric: 'coverage.lines',
       importance: high ? 'high' : 'mid',
-      current: `${numberFormat.format(tenthsDown(linesPercent))}%`,
+      current: formatLineCoverage(linesPercent),
       target: `${numberFormat.format(thresholds.target)}%`,
       description: high
         ? 'Добавьте тесты на непокрытый код, начиная с основной логики.'
