@@ -13,6 +13,13 @@ import { createKnipPlugin, createPrettierPlugin } from '../dist/index.js';
 const officialFixture = new URL('../docs/code-pushup-compatibility/sample-report.json', import.meta.url);
 const partialFixture = new URL('./fixtures/result/report.json', import.meta.url);
 
+test('пакеты Code PushUp закреплены на одной версии', async () => {
+  const { dependencies } = await readJson(new URL('../package.json', import.meta.url));
+  const codePushUp = Object.entries(dependencies).filter(([name]) => name.startsWith('@code-pushup/'));
+  const versions = [...new Set(codePushUp.map(([, version]) => version))];
+  assert.equal(versions.length, 1, codePushUp.map(([name, version]) => `${name}@${version}`).join(', '));
+});
+
 async function readJson(file) {
   return JSON.parse(await readFile(file, 'utf8'));
 }

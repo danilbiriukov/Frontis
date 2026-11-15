@@ -52,6 +52,7 @@ export default {
 
 Frontis использует точную версию `0.126.4` для `@code-pushup/core`, `@code-pushup/models`, `@code-pushup/js-packages-plugin`, `@code-pushup/eslint-plugin` и `@code-pushup/coverage-plugin`.
 
-1. Обновите согласованные версии в `package.json` и lock-файл. Сверьте совместимость на Node.js 22 и 26.
+1. Проверьте групповой PR Dependabot `code-pushup`. В `package.json` у всех пакетов `@code-pushup/*` должна быть одна точная версия. Если обновилась только часть пакетов, выберите общую доступную версию и обновите `package-lock.json`. Сверьте совместимость по матрице CI.
 2. Соберите проект и проверьте контракт без доступа к реестру. Запустите `npm run build`, затем `node --test test/code-pushup-contract.test.js test/result.test.js test/frontis-plugins.test.js`.
-3. Если изменились поля модели или аудитов, проверьте адаптеры, нормализацию и отчёт на контрольных проектах. Обновите образец контракта после сверки с реальным отчётом. Затем запустите `npm run lint`, `npm test` и проверку установленного npm-архива. [Базовый отчёт и команды проверки совместимости](code-pushup-compatibility/README.md)
+3. Если изменились поля модели или аудитов, проверьте адаптеры, нормализацию и отчёт на контрольных проектах. Обновите образец контракта после сверки с реальным отчётом. [Базовый отчёт и команды проверки совместимости](code-pushup-compatibility/README.md)
+4. Перед слиянием убедитесь, что CI прошёл. Соберите архив через `npm run pack:release`. После [#76](https://github.com/danilbiriukov/Frontis/issues/76) используйте `npm run smoke:release -- <путь к архиву>`. Ручная проверка описана в [приёмке](acceptance.md#автотесты-и-установка-из-архива).
