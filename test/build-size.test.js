@@ -29,6 +29,8 @@ test('суммарный размер, число файлов и пять кр�
     'dist/assets/b.png': 2000,
     'dist/assets/a.png': 2000,
     'dist/favicon.ico': 50,
+    'dist/assets/app.js.map': 5 * MB,
+    'dist/vendor.js.map': 100,
     'src/main.js': 999_999,
   });
   const result = await collect(projectDir);
@@ -45,6 +47,15 @@ test('суммарный размер, число файлов и пять кр�
   ]);
   assert.equal(result.data.exceeded, false);
   assert.deepEqual(result.findings, []);
+});
+
+test('папка только с картами исходников даёт «Нет данных»', async (t) => {
+  const projectDir = await project(t, { 'dist/assets/app.js.map': 100 });
+
+  const result = await collect(projectDir);
+  assert.equal(result.status, 'no-data');
+  assert.equal(result.code, 'empty-build-dir');
+  assert.match(result.reason, /нет файлов сборки для расчёта/);
 });
 
 test('порог maxMb переводится в байты как 1024 × 1024', async (t) => {
