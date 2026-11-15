@@ -80,7 +80,7 @@ test('run без доступных аудитов возвращает 2 и с�
   assert.match(stdout, /Диагностический отчёт:.*report\.html/);
   const html = readFileSync(join(outputDir, 'report.html'), 'utf8');
   assert.doesNotMatch(html, /Предыдущий результат/);
-  assert.ok(html.includes(`Frontis v${version}`));
+  assert.ok(html.includes(`Версия ${version}`));
   const noData = JSON.parse(readFileSync(join(outputDir, 'no-data.json'), 'utf8'));
   assert.deepEqual(Object.fromEntries(noData.map(({ plugin, code }) => [plugin, code])), {
     outdated: 'no-package-json',

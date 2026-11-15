@@ -38,20 +38,22 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /shop-web/);
   assert.match(html, /v4\.12\.0/);
   assert.match(html, /Коммит недоступен/);
-  assert.doesNotMatch(html, /Ветка:/); // branch: null -> не отображается
-  assert.match(html, /Frontis v0\.1\.0/);
+  assert.doesNotMatch(html, /<dt>Ветка<\/dt>/);
+  assert.match(html, /Версия 0\.1\.0/);
+  assert.match(html, /Code PushUp 0\.126\.4/);
 
   // Оценка проекта и счетчики
   assert.match(html, /score-card zone-yellow/);
-  assert.match(html, /<div class="score-value">60<\/div>/);
+  assert.match(html, /<span class="score-value number">60<\/span>/);
+  assert.match(html, /aria-label="Оценка проекта"[^>]+aria-valuenow="60"/);
   assert.match(html, /Требуются плановые работы/);
   assert.match(html, /Охват: 3 из 5 показателей/);
 
   // 4 счетчика
-  assert.match(html, /<div class="counter-count">1<\/div>\s*<div class="counter-label">Действий не требуется<\/div>/);
-  assert.match(html, /<div class="counter-count">1<\/div>\s*<div class="counter-label">Запланировать<\/div>/);
-  assert.match(html, /<div class="counter-count">1<\/div>\s*<div class="counter-label">Исправить<\/div>/);
-  assert.match(html, /<div class="counter-count">2<\/div>\s*<div class="counter-label">Нет данных<\/div>/);
+  const counters = [...html.matchAll(/<div class="counter-label">([^<]+)<\/div>.*\n\s*<div class="counter-count number">(\d+)<\/div>/g)];
+  assert.deepEqual(counters.map(([, label, count]) => [label, Number(count)]), [
+    ['Исправить', 1], ['Запланировать', 1], ['Действий не требуется', 1], ['Нет данных', 2],
+  ]);
 
   // Рекомендации
   assert.match(html, /Исправьте ошибки линтера\./);
@@ -60,14 +62,14 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /badge-importance-mid/);
 
   // Таблица причин "Нет данных"
-  assert.match(html, /Причины отсутствия данных/);
+  assert.match(html, /Показатели без данных/);
   assert.match(html, /В отчёте Code PushUp не хватает аудитов для проверки\./);
   assert.match(html, /В проекте нет настроек Prettier\./);
 
   // Карточки показателей
   assert.match(html, /Неиспользуемый код/);
   assert.match(html, /Качество кода/);
-  assert.match(html, /Тесты и покрытие/);
+  assert.match(html, /Покрытие тестами/);
   assert.match(html, /Неполные данные/);
 
   // Детали находок ESLint
@@ -75,12 +77,35 @@ test('generateHtmlReport собирает полный автономный HTML
   assert.match(html, /src\/demo\.js:2/);
 
   // Автономность: системные шрифты, нет внешних запросов
-  assert.doesNotMatch(html, /https?:\/\//);
-  assert.doesNotMatch(html, /@import/);
+  const docsLink = '<a href="https://github.com/danilbiriukov/Frontis#readme">';
+  assert.ok(html.includes(docsLink));
+  assert.doesNotMatch(html.replace(docsLink, ''), /https?:\/\/|@import|url\(|<(?:img|link|script|iframe)\b/i);
 
   // Размер до 1 МБ
   const sizeBytes = Buffer.byteLength(html, 'utf8');
   assert.ok(sizeBytes < 1_000_000, `Размер HTML ${sizeBytes} превышает 1 МБ`);
+});
+
+test('шкала LCOV следует статусу покрытия, а время показывается только для начатых проверок', () => {
+  const result = structuredClone(fixtureResult);
+  const coverage = result.indicators.find(({ id }) => id === 'coverage');
+  coverage.status = 'fix';
+  coverage.checks.reverse();
+  const lcov = coverage.checks.find(({ id }) => id === 'coverage');
+  lcov.status = 'ok';
+  lcov.facts.lines = 94;
+  const html = generateHtmlReport({
+    result, durations: new Map([['coverage', 700], ['tests', 300]]),
+  });
+  const coverageCard = html.match(/id="indicator-coverage">([\s\S]+?)<\/article>/)[1];
+  assert.match(coverageCard, /class="meter status-ok"/);
+  assert.match(coverageCard, /aria-label="Покрытие строк"[^>]+aria-valuenow="94"/);
+  assert.match(coverageCard, /meter-warn" style="left:65%"/);
+  assert.match(coverageCard, /meter-target" style="left:90%"/);
+  assert.match(coverageCard, /Порог 65%/);
+  assert.match(coverageCard, /Цель 90%/);
+  assert.match(coverageCard, /Jest \/ Vitest, LCOV<\/code><span>1 с/);
+  assert.match(html, /<code>npm audit<\/code><\/footer>/);
 });
 
 test('generateHtmlReport экранирует XSS-нагрузки в сообщениях и путях', () => {
@@ -194,7 +219,10 @@ test('generateHtmlReport без result формирует диагностиче
   assert.match(html, /Добавьте конфигурационный файл ESLint\./);
   assert.match(html, /logs\/lint\.log/);
   assert.match(html, /knip-not-installed/);
-  assert.doesNotMatch(html, /Оценка проекта<\/div>\s*<div class="score-value">\d+/);
+  assert.match(html, /score-card zone-none/);
+  assert.match(html, /class="score-value number">—<\/span>/);
+  assert.match(html, /Недостаточно данных для оценки\. Доступно 0 из 2 показателей/);
+  assert.doesNotMatch(html, /aria-label="Оценка проекта"/);
 });
 
 test('writeReportFile записывает HTML и создаёт промежуточные папки', async (t) => {
